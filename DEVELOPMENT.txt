@@ -1,0 +1,2 @@
+1. nosetests shall be installed
+2. when using vim use ":compiler pyunit" and then make ut to run unit tests

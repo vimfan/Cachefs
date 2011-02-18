@@ -25,10 +25,10 @@ class TestSshfsManager(unittest.TestCase):
 
     def setUp(self):
         self.config = UtHelper.getDefaultConfig()
-        self.sut = SshFsManager(self._config.user,
-                                self._config.server,
-                                self._config.remote_path,
-                                self._config.local_path)
+        self.sut = sshcachefs.SshFsManager(self.config.user,
+                                           self.config.server,
+                                           self.config.remote_dir,
+                                           self.config.sshfs_mountpoint)
 
     def tearDown(self):
         pass
