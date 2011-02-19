@@ -40,6 +40,9 @@ class TestSshCacheFs(unittest.TestCase):
     def test_start(self):
         pass
 
+    def test_stop(self):
+        pass
+
 class TestSshfsManager(unittest.TestCase):
 
     def setUp(self):
