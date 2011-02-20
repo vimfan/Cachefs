@@ -1,10 +1,12 @@
-import sys
 import os
-import time
-import subprocess
+import shutil
 import signal
-import fuse
 import stat
+import subprocess
+import sys
+import time
+
+import fuse
 
 class CriticalError(Exception):
     pass
@@ -153,18 +155,23 @@ class CacheManager(object):
         path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
         return os.access(path, os.R_OK)
 
-    def _create_local_copy(self, filepath):
-        pass
+    def _create_local_copy(self, rel_filepath):
+        src = os.path.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
+        dst = self._full_cache_path(rel_filepath)
+        parent_dir = os.path.dirname(dst)
+        if not os.path.exists(parent_dir):
+            os.makedirs(parent_dir)
+        shutil.copyfile(src, dst)
 
-    def _get_cache_path(self, filepath):
-        full_path = self._full_cache_path()
-        if not os.path.exists(full_path):
+    def _get_cache_path(self, rel_filepath):
+        full_path = self._full_cache_path(rel_filepath)
+        if os.path.exists(full_path):
             return full_path
         return None
 
-    def _full_cache_path(self, filepath):
+    def _full_cache_path(self, rel_filepath):
         root = self._cache_root_dir()
-        return os.path.sep.join([root, filepath])
+        return os.path.sep.join([root, rel_filepath])
 
     def _absolute_remote_path(self, rel_path):
         path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])

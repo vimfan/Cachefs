@@ -1,3 +1,5 @@
+TCP=
+
 all:
 	echo "nothing"
 
@@ -6,3 +8,6 @@ tags: *.py
 
 tests:
 	nosetests -v 
+
+test: *.py
+	python -v -m unittest $(TCP)
