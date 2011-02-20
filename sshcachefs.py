@@ -49,15 +49,15 @@ class SshfsManager(object):
         self._wait_for_mount()
 
     def stop(self):
-        #if not self._ssh_process_handle:
-        #    return
+        if not self._ssh_process_handle:
+            return
 
         mountpoint = self.cfg.sshfs_mountpoint
         if (os.path.ismount(mountpoint)):
             subprocess.call([self.cfg.fusermount_bin, '-u', mountpoint])
-        #else:
-        #    pid = self._ssh_process_handle.pid
-        #    os.kill(pid, signal.SIGINT)
+        else:
+            pid = self._ssh_process_handle.pid
+            os.kill(pid, signal.SIGINT)
 
         self._ssh_process_handle = None
 

@@ -17,6 +17,7 @@ class UtHelper:
 
         # sshfs specific configuration options
         sshfs_prefix                = os.path.sep.join([common_prefix, 'sshfs'])
+        config.ut_cleanup_dir       = sshfs_prefix
         config.ssh.server           = 'localhost'
         config.ssh.user             = 'seba'
         config.ssh.remote_dir       = os.path.sep.join([sshfs_prefix, 'remote_dir'])
@@ -58,6 +59,7 @@ class TestSshfsManager(unittest.TestCase):
     def tearDown(self):
         self._remove_remote_dir()
         self._umount_all()
+        shutil.rmtree(UtHelper.getConfigForTest().ut_cleanup_dir)
 
     def test_run(self):
         pass
@@ -91,14 +93,15 @@ class TestSshfsManager(unittest.TestCase):
         filename = 'test_run_stop___file'
         self._create_remote_file(filename, length)
 
+
         self.sut.stop()
 
         self.assertFalse(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
 
     def test_stop_wait1sec_connectAfter2(self):
         self.sut.cfg.sshfs_bin = './bin_fakes/sshfs_fake.sh'
-        self.sut.cfg.wait_for_mount = 1
-        self.sut.cfg.sshfs_options.append('2') # interpreted by fake
+        self.sut.cfg.wait_for_mount = 1 
+        self.sut.cfg.sshfs_options.append('5') # interpreted by fake
 
         self.assertRaises(sshcachefs.CriticalError, self.sut.run)
         self.sut.stop()
