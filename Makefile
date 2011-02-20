@@ -4,5 +4,5 @@ all:
 tags: *.py
 	ctags -R *
 
-ut:
-	nosetests -v
+tests:
+	nosetests -v 

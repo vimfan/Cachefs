@@ -14,7 +14,7 @@ class Config(object):
     class SshfsManagerConfig(object):
         def __init__(self):
             self.sshfs_bin        = '/usr/bin/sshfs'
-            self.sshfs_options    = ['-f'] # to run sshfs in foreground
+            self.sshfs_options    = ['-f', '-o', 'follow_symlinks']
             self.fusermount_bin   = '/usr/bin/fusermount'
             self.sshfs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/.sshfs_mount'
             self.server           = 'localhost'
@@ -122,23 +122,28 @@ class CacheManager(object):
         self.sshfs_access = sshfs_access
 
     def run(self):
-        pass
+        self._prepare_directories()
 
     def stop(self):
         pass
 
-    def path_to_cached(self, path):
-        pass
-
+    def get_cached_file_path(self, origin_filepath):
+        if not self._get_cache_path(origin_filepath):
+            assert(self.sshfs_access.is_serving())
+            self._create_local_copy(origin_filepath)
+        return self._get_cache_path(origin_filepath)
+        
     # getattr FS API equivalent
     def is_dir(self, path):
-        return not self.is_file(path)
+        st_mode = os.stat(self._absolute_remote_path(path)).st_mode
+        #assert(not stat.S_ISLNK(st_mode))
+        return stat.S_ISDIR(st_mode) 
 
     def is_file(self, path):
         st_mode = os.stat(self._absolute_remote_path(path)).st_mode
         # currently links are not supported, maybe support can be avoided by adding
         # option '-o follow-symbolic-links or similar' to sshfs
-        assert(not stat.S_ISLNK(st_mode)) 
+        #assert(not stat.S_ISLNK(st_mode)) 
         return stat.S_ISREG(st_mode) 
 
     # access FS API equivalent
@@ -148,19 +153,34 @@ class CacheManager(object):
         path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
         return os.access(path, os.R_OK)
 
+    def _create_local_copy(self, filepath):
+        pass
+
+    def _get_cache_path(self, filepath):
+        full_path = self._full_cache_path()
+        if not os.path.exists(full_path):
+            return full_path
+        return None
+
+    def _full_cache_path(self, filepath):
+        root = self._cache_root_dir()
+        return os.path.sep.join([root, filepath])
+
     def _absolute_remote_path(self, rel_path):
         path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
         return path
 
-    def _prepare_cache_root_dir(self):
-        pass
+    def _prepare_directories(self):
+        dir = self._cache_root_dir()
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
     def _cache_root_dir(self):
         #nowstr = str(datetime.datetime.now()).replace(' ', '_')
         #pidstr = str(os.getpid())
         #cache_root = [self._config.cache_dir, pidstr, nowstr, self._config.remote_dir]
         #return "".join(cache_root)
-        return self.cfg.cache_dir
+        return self.cfg.cache_root_dir
 
 class SshCacheFs(object):
 

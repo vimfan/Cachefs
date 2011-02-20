@@ -26,7 +26,7 @@ class TestHelper:
         config.ssh.remote_dir       = os.path.sep.join([sshfs_prefix, 'remote_dir'])
         config.ssh.sshfs_mountpoint = os.path.sep.join([sshfs_prefix, 'sshfs_mountpoint'])
         config.ssh.wait_for_mount   = 3.0
-        config.ssh.sshfs_options    = ['-f']
+        config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
 
         # cache manager specific config options
         cache_prefix                = common_prefix
@@ -41,7 +41,7 @@ class TestHelper:
     def create_remote_dir(cfg, path = ''):
         assert(isinstance(cfg, sshcachefs.Config.SshfsManagerConfig))
         if path:
-            remote_dir = os.path.sep.join(cfg.remote_dir, path)
+            remote_dir = os.path.sep.join([cfg.remote_dir, path])
         else:
             remote_dir = cfg.remote_dir
         standalone_cmd = " ".join(['mkdir', '-p', remote_dir])
@@ -86,30 +86,46 @@ class TestCacheManager(unittest.TestCase):
                                            sshcachefs.SshCacheFs.SshfsAccess(self.sshfs_manager))
         TestHelper.create_remote_dir(self.sshfs_manager.cfg)
         self.sshfs_manager.run()
+        self.sut.run()
 
     def tearDown(self):
+        #self.sut.stop()
         self.sshfs_manager.stop()
 
+    def test_create_cache_dir(self):
+        self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
+
     def test_exists(self):
-
         file_path = 'TestCacheManager.test_exists.txt'
-
         TestHelper.create_remote_file(self.sshfs_manager.cfg, 
                                       file_path,
                                       'test_exists' * 5)
-
         self.assertTrue(self.sut.exists(file_path))
 
     def test_is_file(self):
         file_path = 'TestCacheManager.test_is_file.txt'
-
         TestHelper.create_remote_file(self.sshfs_manager.cfg,
                                       file_path,
                                       'test_is_file' * 10)
-
         self.assertTrue(self.sut.exists(file_path))
         self.assertTrue(self.sut.is_file(file_path))
         self.assertFalse(self.sut.is_dir(file_path))
+
+    def test_is_dir(self):
+        dir_path = 'TestCacheManager.test_is_dir'
+        TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)
+        self.assertTrue(self.sut.exists(dir_path))
+        self.assertTrue(self.sut.is_dir(dir_path))
+        self.assertFalse(self.sut.is_file(dir_path))
+
+    def test_get_cached_file_path(self):
+        file_path = 'TestCacheManager.test_get_cached_file_path.txt'
+        TestHelper.create_remote_file(self.sshfs_manager.cfg,
+                                      file_path,
+                                      'test_get_cached_file_path' * 7)
+
+    def test_get_cached_file_path_in_subdir(self):
+        pass
 
 class TestSshfsManager(unittest.TestCase):
 
