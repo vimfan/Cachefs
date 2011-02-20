@@ -3,6 +3,8 @@ import os
 import time
 import subprocess
 import signal
+import fuse
+import stat
 
 class CriticalError(Exception):
     pass
@@ -12,9 +14,8 @@ class Config(object):
     class SshfsManagerConfig(object):
         def __init__(self):
             self.sshfs_bin        = '/usr/bin/sshfs'
-            self.sshfs_options    = ['-f']
+            self.sshfs_options    = ['-f'] # to run sshfs in foreground
             self.fusermount_bin   = '/usr/bin/fusermount'
-            self.bin              = '/usr/bin/ssh'
             self.sshfs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/.sshfs_mount'
             self.server           = 'localhost'
             self.user             = 'seba'
@@ -36,6 +37,7 @@ class SshfsManager(object):
         assert(isinstance(config, Config.SshfsManagerConfig))
         self.cfg = config
         self._ssh_process_handle = None
+        self._is_serving = False
 
     def run(self):
         self._create_dirs()
@@ -47,19 +49,22 @@ class SshfsManager(object):
             args.extend(cfg.sshfs_options) 
         self._ssh_process_handle = subprocess.Popen(args)
         self._wait_for_mount()
+        self._is_serving = True
 
     def stop(self):
         if not self._ssh_process_handle:
             return
-
         mountpoint = self.cfg.sshfs_mountpoint
         if (os.path.ismount(mountpoint)):
             subprocess.call([self.cfg.fusermount_bin, '-u', mountpoint])
         else:
             pid = self._ssh_process_handle.pid
             os.kill(pid, signal.SIGINT)
-
+        self._is_serving = False
         self._ssh_process_handle = None
+
+    def is_serving(self):
+        return self._is_serving
 
     def _wait_for_mount(self):
         assert(self.cfg)
@@ -106,14 +111,15 @@ class SshfsManager(object):
                 return
             except:
                 raise CriticalError("Cannot create directory %s" % mountpoint)
-
-        # else directory is already created and most likely ready to mounting
+        # else directory is already created and seems to be ready to mounting
 
 class CacheManager(object):
 
-    def __init__(self, config):
+    def __init__(self, config, sshfs_access):
         assert(isinstance(config, Config.CacheManagerConfig))
+        assert(isinstance(sshfs_access, SshCacheFs.SshfsAccess))
         self.cfg = config
+        self.sshfs_access = sshfs_access
 
     def run(self):
         pass
@@ -121,12 +127,30 @@ class CacheManager(object):
     def stop(self):
         pass
 
-    def is_dir(self, path):
+    def path_to_cached(self, path):
         pass
 
-    def exists(self, path):
-        # os.path.ismount()
-        pass
+    # getattr FS API equivalent
+    def is_dir(self, path):
+        return not self.is_file(path)
+
+    def is_file(self, path):
+        st_mode = os.stat(self._absolute_remote_path(path)).st_mode
+        # currently links are not supported, maybe support can be avoided by adding
+        # option '-o follow-symbolic-links or similar' to sshfs
+        assert(not stat.S_ISLNK(st_mode)) 
+        return stat.S_ISREG(st_mode) 
+
+    # access FS API equivalent
+    def exists(self, rel_path):
+        if not self.sshfs_access.is_serving():
+            return False
+        path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
+        return os.access(path, os.R_OK)
+
+    def _absolute_remote_path(self, rel_path):
+        path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
+        return path
 
     def _prepare_cache_root_dir(self):
         pass
@@ -140,17 +164,28 @@ class CacheManager(object):
 
 class SshCacheFs(object):
 
+    class SshfsAccess(object):
+        def __init__(self, sshfs_manager):
+            self._sshfs_mgr = sshfs_manager
+
+        def mountpoint(self):
+            return self._sshfs_mgr.cfg.sshfs_mountpoint
+
+        def is_serving(self):
+            return self._sshfs_mgr.is_serving()
+
     def __init__(self, config):
         self.cfg = config
         self._sshfs_manager = SshfsManager(self.cfg.ssh)
-        self._cache_manager = CacheManager(self.cfg.cache)
+        self._cache_manager = CacheManager(self.cfg.cache, 
+                                           SshCacheFs.SshfsAccess(self._sshfs_manager))
 
     def run(self):
         self._sshfs_manager.run()
         self._cache_manager.run()
 
     def stop(self):
-        pass
+        self._sshfs_manager.stop()
 
     def readdir(self, path):
         pass
