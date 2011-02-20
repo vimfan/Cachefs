@@ -1,8 +1,8 @@
 all:
 	echo "nothing"
 
-tags:
+tags: *.py
 	ctags -R *
 
 ut:
-	nosetests
+	nosetests -v
