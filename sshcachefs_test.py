@@ -4,6 +4,7 @@ import os
 import subprocess
 import time
 import tempfile
+import config
 
 import sshcachefs
 
@@ -12,34 +13,34 @@ class TestHelper:
     @staticmethod
     def getConfigForTest():
 
-        config                      = sshcachefs.Config()
+        test_config                   = config.getConfig()
 
         common_prefix               = '/home/seba/job/nsn/ssh_cache_fs/test'
 
         # sshfs specific configuration options
         sshfs_prefix                = os.path.sep.join([common_prefix, 'sshfs'])
-        config.ut_cleanup_dir       = sshfs_prefix
-        config.ssh.ut_ssh_bin       = '/usr/bin/ssh'
-        config.ssh.ut_scp_bin       = '/usr/bin/scp'
-        config.ssh.server           = 'localhost'
-        config.ssh.user             = 'seba'
-        config.ssh.remote_dir       = os.path.sep.join([sshfs_prefix, 'remote_dir'])
-        config.ssh.sshfs_mountpoint = os.path.sep.join([sshfs_prefix, 'sshfs_mountpoint'])
-        config.ssh.wait_for_mount   = 3.0
-        config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
+        test_config.ut_cleanup_dir       = sshfs_prefix
+        test_config.ssh.ut_ssh_bin       = '/usr/bin/ssh'
+        test_config.ssh.ut_scp_bin       = '/usr/bin/scp'
+        test_config.ssh.server           = 'localhost'
+        test_config.ssh.user             = 'seba'
+        test_config.ssh.remote_dir       = os.path.sep.join([sshfs_prefix, 'remote_dir'])
+        test_config.ssh.sshfs_mountpoint = os.path.sep.join([sshfs_prefix, 'sshfs_mountpoint'])
+        test_config.ssh.wait_for_mount   = 3.0
+        test_config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
 
         # cache manager specific config options
         cache_prefix                = common_prefix
-        config.cache.cache_root_dir = os.path.sep.join([cache_prefix, 'cache'])
+        test_config.cache.cache_root_dir = os.path.sep.join([cache_prefix, 'cache'])
 
         # cache filesystem options
-        config.mountpoint           = os.path.sep.join([common_prefix, 'mountpoint'])
+        test_config.mountpoint           = os.path.sep.join([common_prefix, 'mountpoint'])
 
-        return config
+        return test_config
 
     @staticmethod
     def create_remote_dir(cfg, path = ''):
-        assert(isinstance(cfg, sshcachefs.Config.SshfsManagerConfig))
+        assert(isinstance(cfg, config.Config.SshfsManagerConfig))
         if path:
             remote_dir = os.path.sep.join([cfg.remote_dir, path])
         else:
@@ -63,11 +64,14 @@ class TestHelper:
         assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
         named_tmp_file.close() # automatically will be removed
 
+def getConfig():
+    return TestHelper.getConfigForTest()
 
 class TestSshCacheFs(unittest.TestCase):
 
     def setUp(self):
-        self.sut = sshcachefs.SshCacheFs(TestHelper.getConfigForTest())
+        pass
+        #self.sut = sshcachefs.SshCacheFs(TestHelper.getConfigForTest())
 
     def tearDown(self):
         pass
@@ -130,22 +134,34 @@ class TestCacheManager(unittest.TestCase):
         self.assertTrue(os.path.exists(cached_filepath))
         self.assertEqual(file_content, open(cached_filepath).read())
 
-    def test_get_cached_file_path_in_subdir(self):
-        dir_path = 'TestCacheManager.test_get_cached_file_path_in_subdir'
+    def test_get_cached_file_path_twice_on_differrent_files(self):
+
+        dir_path = 'TestCacheManager.test_get_cached_file_path_twice_on_differrent_files'
         TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)
         dir_path = os.path.sep.join([dir_path, 'subdir'])
         TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)
 
-        file_path = os.path.sep.join([dir_path, 'test_get_cached_file_path_in_subdir.txt'])
+        file_path = os.path.sep.join([dir_path, '1.txt'])
         file_content = '#' * 8
-
         TestHelper.create_remote_file(self.sshfs_manager.cfg,
                                       file_path,
                                       file_content)
 
+        file_path2 = os.path.sep.join([dir_path, '2.txt'])
+        file_content2 = '/' * 8
+        TestHelper.create_remote_file(self.sshfs_manager.cfg,
+                                      file_path2,
+                                      file_content2)
+
         cached_filepath = self.sut.get_cached_file_path(file_path)
         self.assertTrue(os.path.exists(cached_filepath))
         self.assertEqual(file_content, open(cached_filepath).read())
+
+        cached_filepath2 = self.sut.get_cached_file_path(file_path2)
+        self.assertTrue(os.path.exists(cached_filepath2))
+        self.assertEqual(file_content2, open(cached_filepath2).read())
+
+
 
 class TestSshfsManager(unittest.TestCase):
 

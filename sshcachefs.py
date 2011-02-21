@@ -5,39 +5,33 @@ import stat
 import subprocess
 import sys
 import time
-
+import logging
 import fuse
+
+LOG_FILENAME = "LOG"
+logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
+
+if __name__ == '__main__':
+    import_config = 'config'
+    if len(sys.argv) == 2:
+        import_config = sys.argv[1]
+    exec('import %s as config' % import_config)
+else:
+    import config
+
+# FUSE version at the time of writing. Be compatible with this version.
+fuse.fuse_python_api = (0, 2)
+
+
 
 class CriticalError(Exception):
     pass
 
-class Config(object):
-
-    class SshfsManagerConfig(object):
-        def __init__(self):
-            self.sshfs_bin        = '/usr/bin/sshfs'
-            self.sshfs_options    = ['-f', '-o', 'follow_symlinks']
-            self.fusermount_bin   = '/usr/bin/fusermount'
-            self.sshfs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/.sshfs_mount'
-            self.server           = 'localhost'
-            self.user             = 'seba'
-            self.remote_dir       = '/studinfo/sebam'
-            self.wait_for_mount   = 30
-
-    class CacheManagerConfig(object):
-
-        def __init__(self):
-            self.cache_root_dir = '/home/seba/job/nsn/ssh_cache_fs/.cache'
-
-    def __init__(self):
-        self.ssh = Config.SshfsManagerConfig()
-        self.cache = Config.CacheManagerConfig()
-
 class SshfsManager(object):
 
-    def __init__(self, config):
-        assert(isinstance(config, Config.SshfsManagerConfig))
-        self.cfg = config
+    def __init__(self, cfg):
+        assert(isinstance(cfg, config.Config.SshfsManagerConfig))
+        self.cfg = cfg
         self._ssh_process_handle = None
         self._is_serving = False
 
@@ -117,10 +111,10 @@ class SshfsManager(object):
 
 class CacheManager(object):
 
-    def __init__(self, config, sshfs_access):
-        assert(isinstance(config, Config.CacheManagerConfig))
+    def __init__(self, cfg, sshfs_access):
+        assert(isinstance(cfg, config.Config.CacheManagerConfig))
         assert(isinstance(sshfs_access, SshCacheFs.SshfsAccess))
-        self.cfg = config
+        self.cfg = cfg
         self.sshfs_access = sshfs_access
 
     def run(self):
@@ -189,7 +183,7 @@ class CacheManager(object):
         #return "".join(cache_root)
         return self.cfg.cache_root_dir
 
-class SshCacheFs(object):
+class SshCacheFs(fuse.Fuse):
 
     class SshfsAccess(object):
         def __init__(self, sshfs_manager):
@@ -201,7 +195,8 @@ class SshCacheFs(object):
         def is_serving(self):
             return self._sshfs_mgr.is_serving()
 
-    def __init__(self, config):
+    def __init__(self, config, *args, **kwargs):
+        super(SshCacheFs, self).__init__(*args, **kwargs)
         self.cfg = config
         self._sshfs_manager = SshfsManager(self.cfg.ssh)
         self._cache_manager = CacheManager(self.cfg.cache, 
@@ -214,26 +209,33 @@ class SshCacheFs(object):
     def stop(self):
         self._sshfs_manager.stop()
 
-    def readdir(self, path):
-        pass
+    
+    def fsinit(self):
+        logging.info("File system mounted")
 
-    def opendir(self, path):
-        pass
-
-    def releasedir(self, path):
-        pass
-
-    def access(self, path):
-        pass
-
-    def getattr(self, path):
-        pass
-
-    def fgetattr(self, path):
-        pass
+    def fsdestroy(self):
+        logging.info("Unmounting file system")
 
     def readlink(self, path):
-        pass
+        return -errno.ENOSYS
+
+    def readdir(self, path):
+        return -errno.ENOSYS
+
+    def opendir(self, path):
+        return -errno.ENOSYS
+
+    def releasedir(self, path):
+        return -errno.ENOSYS
+
+    def access(self, path):
+        return -errno.ENOSYS
+
+    def getattr(self, path):
+        return -errno.ENOSYS
+
+    def fgetattr(self, path):
+        return -errno.ENOSYS
 
     # file: open, read, flush, release
     # won't be implemented, becuase only symlinks
@@ -245,3 +247,35 @@ class SshCacheFs(object):
     #def readlink(self, path):
         #pass
 
+class CacheFsManager(object):
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def run(self):
+        usage = """
+        SshCacheFs: Sshfs read-only cache virtual filesystem.
+        """ + fuse.Fuse.fusage
+        server = SshCacheFs(config, 
+                            version="%prog " + fuse.__version__,
+                            usage=usage, 
+                            dash_s_do='setsingle')
+
+        server.parse(errex=1)
+        server.multithreaded = 0
+        try:
+            server.main()
+        except fuse.FuseError, e:
+            print str(e)
+
+    def stop(self):
+        pass
+
+def main():
+    mgr = CacheFsManager()
+    mgr.run()
+
+if __name__ == '__main__':
+    main()
+
+logging.info("File system unmounted")

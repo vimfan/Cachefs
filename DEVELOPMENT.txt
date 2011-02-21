@@ -1,2 +1,4 @@
 1. nosetests shall be installed
 2. when using vim use ":compiler pyunit" and then make ut to run unit tests
+3. remember about -s option (serializable?), to disable multithreading, 
+    and avoiding many problems regarding multithreading
