@@ -23,7 +23,6 @@ else:
 fuse.fuse_python_api = (0, 2)
 
 
-
 class CriticalError(Exception):
     pass
 
@@ -195,9 +194,9 @@ class SshCacheFs(fuse.Fuse):
         def is_serving(self):
             return self._sshfs_mgr.is_serving()
 
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, cfg, *args, **kwargs):
         super(SshCacheFs, self).__init__(*args, **kwargs)
-        self.cfg = config
+        self.cfg = cfg
         self._sshfs_manager = SshfsManager(self.cfg.ssh)
         self._cache_manager = CacheManager(self.cfg.cache, 
                                            SshCacheFs.SshfsAccess(self._sshfs_manager))
@@ -205,6 +204,7 @@ class SshCacheFs(fuse.Fuse):
     def run(self):
         self._sshfs_manager.run()
         self._cache_manager.run()
+        self.main()
 
     def stop(self):
         self._sshfs_manager.stop()
@@ -247,33 +247,21 @@ class SshCacheFs(fuse.Fuse):
     #def readlink(self, path):
         #pass
 
-class CacheFsManager(object):
-
-    def __init__(self, cfg):
-        self.cfg = cfg
-
-    def run(self):
-        usage = """
-        SshCacheFs: Sshfs read-only cache virtual filesystem.
-        """ + fuse.Fuse.fusage
-        server = SshCacheFs(config, 
-                            version="%prog " + fuse.__version__,
-                            usage=usage, 
-                            dash_s_do='setsingle')
-
-        server.parse(errex=1)
-        server.multithreaded = 0
-        try:
-            server.main()
-        except fuse.FuseError, e:
-            print str(e)
-
-    def stop(self):
-        pass
-
 def main():
-    mgr = CacheFsManager()
-    mgr.run()
+    usage = """
+    SshCacheFs: Sshfs read-only cache virtual filesystem.
+    """ + fuse.Fuse.fusage
+    server = SshCacheFs(config.getConfig(), 
+                        version="%prog " + fuse.__version__,
+                        usage=usage, 
+                        dash_s_do='setsingle')
+
+    server.parse(errex=1)
+    server.multithreaded = 0
+    try:
+        server.run()
+    except fuse.FuseError, e:
+        print str(e)
 
 if __name__ == '__main__':
     main()

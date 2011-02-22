@@ -161,8 +161,6 @@ class TestCacheManager(unittest.TestCase):
         self.assertTrue(os.path.exists(cached_filepath2))
         self.assertEqual(file_content2, open(cached_filepath2).read())
 
-
-
 class TestSshfsManager(unittest.TestCase):
 
     def setUp(self):

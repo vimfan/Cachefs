@@ -20,7 +20,7 @@ class Config(object):
     class CacheFsConfig(object):
 
         def __init__(self):
-            pass
+            self.cache_fs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/cachefs'
 
     def __init__(self):
         self.ssh = Config.SshfsManagerConfig()
