@@ -1,13 +1,13 @@
-TCP=
+#TCP=
 
 all:
 	echo "nothing"
 
 tags: *.py
-	ctags -R *
+	ctags -R * --language-force=python
 
 tests:
 	nosetests -v 
 
-test: *.py
-	python -v -m unittest $(TCP)
+#test: *.py
+	#python -v -m unittest $(TCP)

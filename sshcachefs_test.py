@@ -7,18 +7,18 @@ import tempfile
 import config
 
 import sshcachefs
+import sshcachefs_runner
 
 class TestHelper:
 
     @staticmethod
     def getConfigForTest():
 
-        test_config                   = config.getConfig()
-
-        common_prefix               = '/home/seba/job/nsn/ssh_cache_fs/test'
+        test_config                      = config.getConfig()
+        common_prefix                    = '/home/seba/job/nsn/ssh_cache_fs/test'
 
         # sshfs specific configuration options
-        sshfs_prefix                = os.path.sep.join([common_prefix, 'sshfs'])
+        sshfs_prefix                     = os.path.sep.join([common_prefix, 'sshfs'])
         test_config.ut_cleanup_dir       = sshfs_prefix
         test_config.ssh.ut_ssh_bin       = '/usr/bin/ssh'
         test_config.ssh.ut_scp_bin       = '/usr/bin/scp'
@@ -30,11 +30,13 @@ class TestHelper:
         test_config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
 
         # cache manager specific config options
-        cache_prefix                = common_prefix
-        test_config.cache.cache_root_dir = os.path.sep.join([cache_prefix, 'cache'])
+        cache_prefix                            = common_prefix
+        test_config.cacheManager.cache_root_dir = os.path.sep.join([cache_prefix, 'cache'])
 
         # cache filesystem options
-        test_config.mountpoint           = os.path.sep.join([common_prefix, 'mountpoint'])
+        #test_config.mountpoint                  = os.path.sep.join([common_prefix, 'mountpoint'])
+
+        test_config.cacheFs.cache_fs_mountpoint = os.path.sep.join([common_prefix, 'cache_fs_mountpoint'])
 
         return test_config
 
@@ -70,23 +72,27 @@ def getConfig():
 class TestSshCacheFs(unittest.TestCase):
 
     def setUp(self):
-        pass
-        #self.sut = sshcachefs.SshCacheFs(TestHelper.getConfigForTest())
+        mountpoint = getConfig().cacheFs.cache_fs_mountpoint
+        assert(not os.path.ismount(mountpoint))
+        if not os.path.exists(mountpoint):
+            os.makedirs(mountpoint)
+        # by line below our getConfig() function will be used by
+        # system under test
+        self.runner = sshcachefs_runner.SshCacheFsRunner(__name__)
+        self.runner.run()
 
     def tearDown(self):
+        self.runner.stop()
+
+    def test_copy(self):
         pass
 
-    def test_run(self):
-        pass
-
-    def test_stop(self):
-        pass
 
 class TestCacheManager(unittest.TestCase):
 
     def setUp(self):
         self.sshfs_manager = sshcachefs.SshfsManager(TestHelper.getConfigForTest().ssh)
-        self.sut = sshcachefs.CacheManager(TestHelper.getConfigForTest().cache,
+        self.sut = sshcachefs.CacheManager(TestHelper.getConfigForTest().cacheManager,
                                            sshcachefs.SshCacheFs.SshfsAccess(self.sshfs_manager))
         TestHelper.create_remote_dir(self.sshfs_manager.cfg)
         self.sshfs_manager.run()
@@ -102,7 +108,7 @@ class TestCacheManager(unittest.TestCase):
 
     def test_exists(self):
         file_path = 'TestCacheManager.test_exists.txt'
-        TestHelper.create_remote_file(self.sshfs_manager.cfg, 
+        TestHelper.create_remote_file(self.sshfs_manager.cfg,
                                       file_path,
                                       '.' * 5)
         self.assertTrue(self.sut.exists(file_path))
@@ -208,7 +214,7 @@ class TestSshfsManager(unittest.TestCase):
 
     def test_stop_wait1sec_mountAfter2(self):
         self.sut.cfg.sshfs_bin = './bin_fakes/sshfs_fake.sh'
-        self.sut.cfg.wait_for_mount = 1 
+        self.sut.cfg.wait_for_mount = 1
         self.sut.cfg.sshfs_options.append('2') # interpreted by fake
 
         self.assertRaises(sshcachefs.CriticalError, self.sut.run)
@@ -250,7 +256,7 @@ class TestSshfsManager(unittest.TestCase):
 
     def _create_remote_dir(self):
         TestHelper.create_remote_dir(self.sut.cfg)
-        
+
     def _remove_remote_dir(self):
         pass
 
