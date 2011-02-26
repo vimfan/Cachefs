@@ -5,9 +5,14 @@ import subprocess
 import time
 import tempfile
 import config
+import stat
 
 import sshcachefs
 import sshcachefs_runner
+import mox
+import errno
+
+import fuse
 
 class TestHelper:
 
@@ -69,7 +74,63 @@ class TestHelper:
 def getConfig():
     return TestHelper.getConfigForTest()
 
-class TestSshCacheFs(unittest.TestCase):
+class TestSshCacheFsUnitTest(unittest.TestCase):
+
+    def setUp(self):
+        self.sut = sshcachefs.SshCacheFs(getConfig())
+
+    def tearDown(self):
+        pass
+
+    def test_getattr(self):
+        # inject stub
+        cache_mgr = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+
+        # configure stub
+        cache_mgr.is_dir('.').AndReturn(True)
+
+        cache_mgr.is_dir('file.txt').AndReturn(False)
+        cache_mgr.is_file('file.txt').AndReturn(True)
+
+        cache_mgr.is_dir('directory').AndReturn(True)
+
+        cache_mgr.is_dir('link').AndReturn(False)
+        cache_mgr.is_file('link').AndReturn(False)
+
+        mox.Replay(cache_mgr)
+
+        # check output
+        self.assertTrue(stat.S_ISDIR(self.sut.getattr('.').st_mode))
+        self.assertTrue(stat.S_ISLNK(self.sut.getattr('file.txt').st_mode))
+        self.assertTrue(stat.S_ISDIR(self.sut.getattr('directory').st_mode))
+        self.assertEqual(-errno.ENOENT, self.sut.getattr('link'))
+
+    def test_access(self):
+        cache_mgr = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+        cache_mgr.exists('file1').AndReturn(True)
+        cache_mgr.exists('file2').AndReturn(False)
+        cache_mgr.exists('file3').AndReturn(True)
+        mox.Replay(cache_mgr)
+
+        failure = -errno.EACCES
+        success = 0
+        self.assertEqual(success, self.sut.access('file1', os.F_OK));
+        self.assertEqual(failure, self.sut.access('file2', os.F_OK));
+        self.assertEqual(success, self.sut.access('file3', os.F_OK));
+        self.assertEqual(failure, self.sut.access('file3', os.W_OK));
+        self.assertEqual(success, self.sut.access('file4', os.R_OK | os.X_OK));
+
+    def test_readdir(self):
+        for entry in self.sut.readdir('.', 0, ''):
+            self.assertTrue(isinstance(entry, fuse.Direntry))
+        pass
+
+    def test_readlink(self):
+        self.sut.readlink('test_readlink')
+        pass
+
+
+class TestSshCacheFsModuleTest(unittest.TestCase):
 
     def setUp(self):
         mountpoint = getConfig().cacheFs.cache_fs_mountpoint
@@ -78,11 +139,12 @@ class TestSshCacheFs(unittest.TestCase):
             os.makedirs(mountpoint)
         # by line below our getConfig() function will be used by
         # system under test
-        self.runner = sshcachefs_runner.SshCacheFsRunner(__name__)
-        self.runner.run()
+        #self.runner = sshcachefs_runner.SshCacheFsRunner(__name__)
+        #self.runner.run()
 
     def tearDown(self):
-        self.runner.stop()
+        #self.runner.stop()
+        pass
 
     def test_copy(self):
         pass
@@ -166,6 +228,25 @@ class TestCacheManager(unittest.TestCase):
         cached_filepath2 = self.sut.get_cached_file_path(file_path2)
         self.assertTrue(os.path.exists(cached_filepath2))
         self.assertEqual(file_content2, open(cached_filepath2).read())
+
+    def test_list_dir(self):
+        dir_path = "TestCacheManager.test_list_dir"
+        TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)
+
+        subdir_name = 'subdir'
+        dir_path2 = os.path.sep.join([dir_path, subdir_name])
+        TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path2)
+
+        file_name = '1.txt'
+        file_path = os.path.sep.join([dir_path, file_name])
+        TestHelper.create_remote_file(self.sshfs_manager.cfg, file_path, 'file_content ... ')
+
+        list_dir_out = self.sut.list_dir(dir_path)
+        input = [file_name, subdir_name]
+        self.assertEqual(2, len(list_dir_out))
+        intersection = list(set(input) & set(list_dir_out))
+        self.assertEqual(2, len(intersection))
+
 
 class TestSshfsManager(unittest.TestCase):
 
