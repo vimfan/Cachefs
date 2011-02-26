@@ -83,21 +83,21 @@ class TestSshCacheFsUnitTest(unittest.TestCase):
         pass
 
     def test_getattr(self):
-        # inject stub
-        cache_mgr = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+        # inject mock
+        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
 
-        # configure stub
-        cache_mgr.is_dir('.').AndReturn(True)
+        # configure mock
+        cache_mgr_mock.is_dir('.').AndReturn(True)
 
-        cache_mgr.is_dir('file.txt').AndReturn(False)
-        cache_mgr.is_file('file.txt').AndReturn(True)
+        cache_mgr_mock.is_dir('file.txt').AndReturn(False)
+        cache_mgr_mock.is_file('file.txt').AndReturn(True)
 
-        cache_mgr.is_dir('directory').AndReturn(True)
+        cache_mgr_mock.is_dir('directory').AndReturn(True)
 
-        cache_mgr.is_dir('link').AndReturn(False)
-        cache_mgr.is_file('link').AndReturn(False)
+        cache_mgr_mock.is_dir('link').AndReturn(False)
+        cache_mgr_mock.is_file('link').AndReturn(False)
 
-        mox.Replay(cache_mgr)
+        mox.Replay(cache_mgr_mock)
 
         # check output
         self.assertTrue(stat.S_ISDIR(self.sut.getattr('.').st_mode))
@@ -106,11 +106,14 @@ class TestSshCacheFsUnitTest(unittest.TestCase):
         self.assertEqual(-errno.ENOENT, self.sut.getattr('link'))
 
     def test_access(self):
-        cache_mgr = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
-        cache_mgr.exists('file1').AndReturn(True)
-        cache_mgr.exists('file2').AndReturn(False)
-        cache_mgr.exists('file3').AndReturn(True)
-        mox.Replay(cache_mgr)
+        # inject mock
+        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+
+        # setup mock
+        cache_mgr_mock.exists('file1').AndReturn(True)
+        cache_mgr_mock.exists('file2').AndReturn(False)
+        cache_mgr_mock.exists('file3').AndReturn(True)
+        mox.Replay(cache_mgr_mock)
 
         failure = -errno.EACCES
         success = 0
@@ -121,9 +124,38 @@ class TestSshCacheFsUnitTest(unittest.TestCase):
         self.assertEqual(success, self.sut.access('file4', os.R_OK | os.X_OK));
 
     def test_readdir(self):
-        for entry in self.sut.readdir('.', 0, ''):
+        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+        dir_entries = ['file', 'subdir', 'file2']
+        dirpath = 'DIR'
+        cache_mgr_mock.exists(dirpath).AndReturn(True)
+        cache_mgr_mock.is_dir(dirpath).AndReturn(True)
+        cache_mgr_mock.list_dir(dirpath).AndReturn(dir_entries)
+        mox.Replay(cache_mgr_mock)
+
+        dir_entries_match = dir_entries + ['.', '..']
+        readdir_entries = []
+
+        for entry in self.sut.readdir(dirpath, 0, ''):
             self.assertTrue(isinstance(entry, fuse.Direntry))
-        pass
+            self.assertTrue(entry.name in dir_entries_match)
+            readdir_entries.append(entry.name)
+
+        self.assertEqual(sorted(dir_entries_match), sorted(readdir_entries))
+
+    def test_readdir_dir_not_exists(self):
+        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+        dirpath = 'DIR'
+        cache_mgr_mock.exists(dirpath).AndReturn(False)
+        mox.Replay(cache_mgr_mock)
+        self.assertEqual(None, self.sut.readdir(dirpath).next())
+
+    def test_readdir_on_file(self):
+        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
+        dirpath = 'DIR'
+        cache_mgr_mock.exists(dirpath).AndReturn(True)
+        cache_mgr_mock.is_dir(dirpath).AndReturn(False)
+        mox.Replay(cache_mgr_mock)
+        self.assertEqual(None, self.sut.readdir(dirpath).next())
 
     def test_readlink(self):
         self.sut.readlink('test_readlink')

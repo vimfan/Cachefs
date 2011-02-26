@@ -534,7 +534,7 @@ class SshCacheFs(fuse.Fuse):
         logging.info("fsyncdir: %s (datasync %s, dh %s)"
             % (path, datasync, dh))
 
-    def readdir(self, path, offset, dh):
+    def readdir(self, path, offset = None, dh = None):
         """
         Generator function. Produces a directory listing.
         Yields individual fuse.Direntry objects, one per file in the
@@ -548,12 +548,15 @@ class SshCacheFs(fuse.Fuse):
         """
         logging.info("readdir: %s (offset %s, dh %s)" % (path, offset, dh))
         # Update timestamps: readdir updates atime
+        if not self.cache_mgr.exists(path):
+            yield 
+        elif not self.cache_mgr.is_dir(path):
+            yield
+
         yield fuse.Direntry(".")
         yield fuse.Direntry("..")
-        for i in range(10):
-            yield fuse.Direntry(str(i))
-        #for f in dh.files.keys():
-            #yield fuse.Direntry(f)
+        for entry in self.cache_mgr.list_dir(path):
+            yield fuse.Direntry(entry)
 
     ### FILE OPERATION METHODS ###
     # Methods in this section are operations for opening files and working on
