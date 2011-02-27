@@ -8,10 +8,10 @@ import time
 import logging
 import datetime
 import calendar
-
 import errno
 import stat    # for file properties
 import os      # for filesystem modes (O_RDONLY, etc)
+import fuse
 
 ######################
 # TODO: treat directories in special way: 
@@ -32,13 +32,32 @@ else:
 
 import config as config_canonical
 
-import fuse
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
 
-LOG_FILENAME = "LOG"
+LOG_FILENAME = "logs/LOG%s" % os.getpid()
 logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
+
+if os.path.exists("LOG"):
+    os.remove("LOG")
+
+os.symlink(LOG_FILENAME, "LOG")
+
+def method_logger(f):
+    def wrapper(*args, **kw):
+        try:
+            class_name = args[0].__class__.__name__
+            func_name = f.func_name
+            logging.info("--> %s.%s(args: %s, kw: %s)" % (class_name, func_name, args[1:], kw))
+            retval = f(*args, **kw)
+            logging.info("<--%s.%s(...) -> returns: %r" % (class_name, func_name, retval))
+
+            return retval
+        except Exception, inst:
+            logging.error("function: %s, exception: %r" % (f.func_name, inst))
+            raise inst
+    return wrapper
 
 class CriticalError(Exception):
     pass
@@ -69,7 +88,9 @@ class SshfsManager(object):
         self._ssh_process_handle = None
         self._is_serving = False
 
+    @method_logger
     def run(self):
+        logging.info("Starting SshfsManager")
         self._create_dirs()
         cfg = self.cfg
         user_host = "@".join([cfg.user, cfg.server])
@@ -80,15 +101,21 @@ class SshfsManager(object):
         self._ssh_process_handle = subprocess.Popen(args)
         self._wait_for_mount()
         self._is_serving = True
+        logging.info("Sshfs is now mounted on: [%s], remote_dir: [%s]" %
+                     (cfg.sshfs_mountpoint, cfg.remote_dir))
 
+    @method_logger
     def stop(self):
+        logging.info("Stopping SshfsManager")
         if not self._ssh_process_handle:
             return
         mountpoint = self.cfg.sshfs_mountpoint
         if (os.path.ismount(mountpoint)):
+            logging.info("Calling: fusermount -u %s" % mountpoint)
             subprocess.call([self.cfg.fusermount_bin, '-u', mountpoint])
         else:
             pid = self._ssh_process_handle.pid
+            logging.info("Killing SshfsManager process: %s" % pid)
             os.kill(pid, signal.SIGINT)
         self._is_serving = False
         self._ssh_process_handle = None
@@ -98,9 +125,9 @@ class SshfsManager(object):
 
     def _wait_for_mount(self):
         assert(self.cfg)
-        assert(self.cfg.sshfs_mountpoint)
-        assert(self.cfg.wait_for_mount)
         assert(self._ssh_process_handle)
+
+        logging.info("Waiting for mount: %s sec" % self.cfg.wait_for_mount)
 
         mountpoint = self.cfg.sshfs_mountpoint
 
@@ -118,6 +145,8 @@ class SshfsManager(object):
             time_elapsed = time.time() - time_start
         if not mounted:
             raise CriticalError("Filesystem not mounted after %d secs" % wait_for_mount)
+
+        logging.info("Filesystem mounted after %s seconds" % time_elapsed)
 
     def _create_dirs(self):
         self._prepare_mountpoint_dir()
@@ -148,7 +177,26 @@ class CacheManager(object):
     class DirWalker(object):
 
         def __init__(self, path):
+            '''For given path get: path, subdirs, files'''
             self.path, self.dirs, self.files = os.walk(path).next()
+
+    class CachedDirWalker(object):
+
+        def __init__(self, path):
+            '''For given path get: path, subdirs, files'''
+            self.suffix = 'stamp'
+            self.path, self.dirs, self._files = os.walk(path).next()
+
+        @property
+        def files(self):
+            return list(set(([self.reverse_transorm(filename) for filename in self._files])))
+        
+        def transform(self, filename):
+            return '.'.join([filename, self.suffix])
+
+        def reverse_transform(self, filename):
+            if filename.endswith(self.suffix):
+                return filename[:-(len(self.suffix) + 1)]
 
     def __init__(self, cfg, sshfs_access):
         assert(isinstance(cfg, config_canonical.Config.CacheManagerConfig))
@@ -156,48 +204,69 @@ class CacheManager(object):
         self.cfg = cfg
         self.sshfs_access = sshfs_access
 
+    @method_logger
     def run(self):
         self._prepare_directories()
 
+    @method_logger
     def stop(self):
+        # deliberately don't remove any directories
         pass
 
-    def get_cached_file_path(self, origin_filepath):
+    @method_logger
+    def get_path_to_file(self, origin_filepath):
         if not self._get_cache_path(origin_filepath):
             assert(self.sshfs_access.is_serving())
             self._create_local_copy(origin_filepath)
         return self._get_cache_path(origin_filepath)
 
+    @method_logger
     def list_dir(self, rel_path):
         assert(self.sshfs_access.is_serving())
         path_to_cache = self._get_cache_path(rel_path)
-        if not path_to_cache:
-            walker = self._create_dir_walker(self._absolute_remote_path(rel_path))
-            # TODO: store internally dir structure
-            return walker.dirs + walker.files
+        if not path_to_cache or os.stat(path_to_cache):
+            #self._create_cache_dirs(rel_path)
+            path_to_cache = self._get_cache_path(rel_path)
+        assert(path_to_cache)
+        walker = self._create_cached_dir_walker(path_to_cache)
+        return walker.dirs + walker.files
 
-    def _create_dir_walker(self, path):
-        return CacheManager.DirWalker(path)
-
+    def _create_cache_dirs(self, rel_path):
+        walker = self._create_dir_walker(self._absolute_remote_path(rel_path))
+        parent_path = self._full_cache_path(rel_path)
+        for dir_entry in walker.dirs:
+            new_dir = os.sep.join([parent_path, dir_entry])
+            if not os.path.exists(new_dir):
+                os.makedirs(new_dir)
+        for file_entry in walker.files:
+            pass
+            #new_file = os.truncate()
+                
     # getattr FS API equivalent
-    def is_dir(self, path):
-        st_mode = os.stat(self._absolute_remote_path(path)).st_mode
+    def is_dir(self, rel_path):
+        st_mode = os.stat(self._absolute_remote_path(rel_path)).st_mode
         return stat.S_ISDIR(st_mode) 
 
-    def is_file(self, path):
-        st_mode = os.stat(self._absolute_remote_path(path)).st_mode
+    def is_file(self, rel_path):
+        st_mode = os.stat(self._absolute_remote_path(rel_path)).st_mode
         return stat.S_ISREG(st_mode) 
 
     # access FS API equivalent
     def exists(self, rel_path):
-        if not self.sshfs_access.is_serving():
-            return False
+        logging.info("exists %s" % rel_path)
+        assert(self.sshfs_access.is_serving())
         # TODO: optimize, firstly cache dir
-        path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
-        return os.access(path, os.R_OK)
+        path = os.sep.join([self.sshfs_access.mountpoint(), rel_path])
+        return os.path.exists(path)
+
+    def _create_dir_walker(self, path):
+        return CacheManager.DirWalker(path)
+
+    def _create_cached_dir_walker(self, path):
+        return CacheManager.CachedDirWalker(path)
 
     def _create_local_copy(self, rel_filepath):
-        src = os.path.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
+        src = os.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
         dst = self._full_cache_path(rel_filepath)
         parent_dir = os.path.dirname(dst)
         if not os.path.exists(parent_dir):
@@ -212,10 +281,10 @@ class CacheManager(object):
 
     def _full_cache_path(self, rel_filepath):
         root = self._cache_root_dir()
-        return os.path.sep.join([root, rel_filepath])
+        return os.sep.join([root, rel_filepath])
 
     def _absolute_remote_path(self, rel_path):
-        path = os.path.sep.join([self.sshfs_access.mountpoint(), rel_path])
+        path = os.sep.join([self.sshfs_access.mountpoint(), rel_path])
         return path
 
     def _prepare_directories(self):
@@ -398,33 +467,41 @@ class SshCacheFs(fuse.Fuse):
         fuse.Fuse.__init__(self, *args, **kw)
         self.cfg = cfg
         self.sshfs_mgr = SshfsManager(self.cfg.ssh)
-        self.cache_mgr = CacheManager(self.cfg.cacheManager, 
+        self.cache_mgr = CacheManager(self.cfg.cache_manager, 
                                            SshCacheFs.SshfsAccess(self.sshfs_mgr))
         self.root = Dir('/', None)
 
+    @method_logger
     def run(self):
-        #self._sshfs_manager.run()
-        #self._cache_manager.run()
+        self.sshfs_mgr.run()
+        self.cache_mgr.run()
         self.main()
 
+    @method_logger
     def stop(self):
-        #self._sshfs_manager.stop()
-        pass
+        self.sshfs_mgr.stop()
+        self.cache_mgr.stop()
 
+    @method_logger
     def fsinit(self):
-        self.root_dir = Dir('/', stat.S_IFDIR|0755, os.getuid(), os.getgid())
-        pass
+        logging.info("Initializing file system")
 
+    @method_logger
     def fsdestroy(self):
+        self.stop()
         logging.info("Unmounting file system")
 
+    @method_logger
     def statfs(self):
-        logging.info("statfs")
         stats = fuse.StatVfs()
         # Fill it in here. All fields take on a default value of 0.
         return stats
 
+    @method_logger
     def getattr(self, path):
+        if not self.cache_mgr.exists(path):
+            logging.info("getattr: file %s not exists" % path)
+            return -errno.ENOENT
         if (self.cache_mgr.is_dir(path)):
             # dr-xr-xr-x
             return Stat(stat.S_IFDIR | 0555, Stat.DIRSIZE, 1, os.getuid(), os.getgid())
@@ -434,9 +511,8 @@ class SshCacheFs(fuse.Fuse):
         else:
             return -errno.ENOENT
         
+    @method_logger
     def access(self, path, flags):
-        logging.info("access: %s (flags %s)" % (path, oct(flags)))
-        logging.info(flags & os.F_OK)
         if flags == os.F_OK:
             if self.cache_mgr.exists(path):
                 return 0
@@ -449,56 +525,51 @@ class SshCacheFs(fuse.Fuse):
         # else if os.R_OK, os.X_OK, os.R_OK | os.X_OK:
         return 0
 
+    @method_logger
     def readlink(self, path):
-        logging.info("readlink: %s" % path)
-        return -errno.EOPNOTSUPP
+        path_to_cached_file = self.cache_mgr.get_path_to_file(path)
+        if path_to_cached_file:
+            return path_to_cached_file
+        return -errno.ENOENT
 
+    @method_logger
     def mknod(self, path, mode, rdev):
-        logging.info("mknod: %s" % path)
         return -errno.ENOENT
 
+    @method_logger
     def mkdir(self, path, mode):
-        logging.info("mkdir: %s" % path)
         return -errno.ENOENT
 
+    @method_logger
     def unlink(self, path):
-        logging.info("unlink: %s" % path)
         return -errno.ENOENT
 
+    @method_logger
     def rmdir(self, path):
-        """Deletes a directory."""
-        logging.info("rmdir: %s" % path)
         return -errno.ENOENT
         
+    @method_logger
     def symlink(self, target, name):
-        logging.info("symlink: target %s, name: %s" % (target, name))
         return -errno.EOPNOTSUPP
 
+    @method_logger
     def link(self, target, name):
-        logging.info("link: target %s, name: %s" % (target, name))
         return -errno.EOPNOTSUPP
 
+    @method_logger
     def rename(self, old, new):
-        logging.info("rename: target %s, name: %s" % (old, new))
         return -errno.EOPNOTSUPP
 
+    @method_logger
     def chmod(self, path, mode):
-        logging.info("chmod: %s (mode %s)" % (path, oct(mode)))
         return -errno.EOPNOTSUPP
 
+    @method_logger
     def chown(self, path, uid, gid):
-        logging.info("chown: %s (uid %s, gid %s)" % (path, uid, gid))
         return -errno.EOPNOTSUPP
 
+    @method_logger
     def truncate(self, path, size):
-        """
-        Shrink or expand a file to a given size.
-        If 'size' is smaller than the existing file size, truncate it from the
-        end.
-        If 'size' if larger than the existing file size, extend it with null
-        bytes.
-        """
-        logging.info("truncate: %s (size %s)" % (path, size))
         return 0
 
     ### DIRECTORY OPERATION METHODS ###
@@ -512,28 +583,23 @@ class SshCacheFs(fuse.Fuse):
     # optional dir-handle argument, which is whatever object "opendir"
     # returned.
 
+    @method_logger
     def opendir(self, path):
-        """
-        Checks permissions for listing a directory.
-        This should check the 'r' (read) permission on the directory.
+        if not self.cache_mgr.exists(path):
+            return -errno.ENOENT
+        if not self.cache_mgr.is_dir(path):
+            return -errno.ENOENT
+        return None # means success
 
-        On success, *may* return an arbitrary Python object, which will be
-        used as the "fh" argument to all the directory operation methods on
-        the directory. Or, may just return None on success.
-        On failure, should return a negative errno code.
-        Should return -errno.EACCES if disallowed.
-        """
-        logging.info("opendir: %s" % path)
-        return self.root
-        #return -errno.EACCES
+    @method_logger
+    def releasedir(self, path, dh = None):
+        pass
 
-    def releasedir(self, path, dh):
-        logging.info("releasedir: %s (dh %s)" % (path, dh))
-
+    @method_logger
     def fsyncdir(self, path, datasync, dh):
-        logging.info("fsyncdir: %s (datasync %s, dh %s)"
-            % (path, datasync, dh))
+        pass
 
+    @method_logger
     def readdir(self, path, offset = None, dh = None):
         """
         Generator function. Produces a directory listing.
@@ -546,7 +612,6 @@ class SshCacheFs(fuse.Fuse):
         request starting the listing partway through (which I clearly don't
         yet support). Seems to always be 0 anyway.
         """
-        logging.info("readdir: %s (offset %s, dh %s)" % (path, offset, dh))
         # Update timestamps: readdir updates atime
         if not self.cache_mgr.exists(path):
             yield 
@@ -569,52 +634,36 @@ class SshCacheFs(fuse.Fuse):
     # prepared to accept an optional file-handle argument, which is whatever
     # object "open" or "create" returned.
 
+    @method_logger
     def open(self, path, flags):
-        logging.info("open: %s (flags %s)" % (path, oct(flags)))
-        #return -errno.ENOENT
-        #file = self._search_path(path)
-        #if file is None:
-            #return -errno.ENOENT
-        #if not isinstance(file, File):
-            #return -errno.EISDIR
-        #accessflags = 0
-        #if flags & os.O_RDONLY:
-            #accessflags |= os.R_OK
-        #if flags & os.O_WRONLY:
-            #accessflags |= os.W_OK
-        #if flags & os.O_RDWR:
-            #accessflags |= os.R_OK | os.W_OK
-        #if file.stat.check_permission(self.GetContext()['uid'],
-            #self.GetContext()['gid'], accessflags):
-            #return file
-        #else:
-            #return -errno.EACCES
-
+        pass
+       
+    @method_logger
     def fgetattr(self, path, fh):
-        logging.debug("fgetattr: %s (fh %s)" % (path, fh))
         return fh.stat
 
+    @method_logger
     def release(self, path, flags, fh):
-        logging.info("release: %s (flags %s, fh %s)" % (path, oct(flags), fh))
+        pass
 
+    @method_logger
     def fsync(self, path, datasync, fh):
-        logging.info("fsync: %s (datasync %s, fh %s)" % (path, datasync, fh))
+        pass
 
+    @method_logger
     def flush(self, path, fh):
-        logging.info("flush: %s (fh %s)" % (path, fh))
+        pass
 
+    @method_logger
     def read(self, path, size, offset, fh):
-        logging.info("read: %s (size %s, offset %s, fh %s)"
-            % (path, size, offset, fh))
         return fh.read(size, offset)
 
+    @method_logger
     def write(self, path, buf, offset, fh):
-        logging.info("write: %s (offset %s, fh %s)" % (path, offset, fh))
-        logging.debug("  buf: %r" % buf)
         return fh.write(buf, offset)
 
+    @method_logger
     def ftruncate(self, path, size, fh):
-        logging.info("ftruncate: %s (size %s, fh %s)" % (path, size, fh))
         fh.truncate(size)
 
 def main():
@@ -630,12 +679,11 @@ def main():
     server.parse(errex=1)
     server.multithreaded = 0
     try:
-        #server.run()
-        server.main()
+        server.run()
     except fuse.FuseError, e:
         print str(e)
 
 if __name__ == '__main__':
     main()
+    logging.info("File system unmounted")
 
-logging.info("File system unmounted")

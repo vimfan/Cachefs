@@ -24,8 +24,8 @@ class Config(object):
 
     def __init__(self):
         self.ssh = Config.SshfsManagerConfig()
-        self.cacheManager = Config.CacheManagerConfig()
-        self.cacheFs = Config.CacheFsConfig()
+        self.cache_manager = Config.CacheManagerConfig()
+        self.cache_fs = Config.CacheFsConfig()
 
 def getConfig():
     return Config()
