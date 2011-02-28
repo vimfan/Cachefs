@@ -16,7 +16,7 @@ import test_config
 import sshcachefs
 import runner
 
-def logger_ut(f):
+def logger_tm(f):
     def wrapper(*args, **kw):
         class_name = args[0].__class__.__name__
         func_name = f.func_name
@@ -81,7 +81,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
     def tearDown(self):
         pass
 
-    @logger_ut
+    @logger_tm
     def test_getattr(self):
         # inject mock
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
@@ -107,7 +107,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
         self.assertTrue(stat.S_ISDIR(self.sut.getattr('directory').st_mode))
         self.assertEqual(-errno.ENOENT, self.sut.getattr('link'))
 
-    @logger_ut
+    @logger_tm
     def test_access(self):
         # inject mock
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(sshcachefs.CacheManager)
@@ -126,7 +126,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
         self.assertEqual(failure, self.sut.access('file3', os.W_OK));
         self.assertEqual(success, self.sut.access('file4', os.R_OK | os.X_OK));
 
-    @logger_ut
+    @logger_tm
     def test_readdir(self):
         DIRPATH = '/DIR'
         dir_entries = ['file', 'subdir', 'file2']
@@ -147,7 +147,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(sorted(dir_entries_match), sorted(readdir_entries))
 
-    @logger_ut
+    @logger_tm
     def test_readdir_dir_not_exists(self):
         DIRPATH = '/DIR'
 
@@ -157,7 +157,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.readdir(DIRPATH).next())
 
-    @logger_ut
+    @logger_tm
     def test_readdir_on_file(self):
         DIRPATH = '/DIR'
 
@@ -168,7 +168,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.readdir(DIRPATH).next())
 
-    @logger_ut
+    @logger_tm
     def test_opendir_success(self):
         DIRPATH = '/DIR'
 
@@ -179,7 +179,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.opendir(DIRPATH))
 
-    @logger_ut
+    @logger_tm
     def test_opendir_not_dir(self):
         FILEPATH = '/FILE'
 
@@ -190,7 +190,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(FILEPATH))
 
-    @logger_ut
+    @logger_tm
     def test_opendir_path_not_exists(self):
         DIRPATH = '/DIR'
 
@@ -200,7 +200,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
 
-    @logger_ut
+    @logger_tm
     def test_readlink_success(self):
         FILEPATH = '/File'
         CACHED_FILE_PATH = "/ABSOLUTE/PATH/TO/CACHED/FILE"
@@ -211,7 +211,7 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(CACHED_FILE_PATH, self.sut.readlink(FILEPATH))
 
-    @logger_ut
+    @logger_tm
     def test_readlink_not_found(self):
         FILEPATH = '/File'
 
@@ -240,7 +240,7 @@ class SshCacheFsModuleTest(unittest.TestCase):
         assert(self.cfg.cache_manager.cache_root_dir)
         shutil.rmtree(self.cfg.cache_manager.cache_root_dir)
 
-    @logger_ut
+    @logger_tm
     def test_directories_only(self):
         SUBDIR_1 = 'subdir1'
         SUBDIR_2 = 'subdir2'
@@ -252,18 +252,48 @@ class SshCacheFsModuleTest(unittest.TestCase):
         TestHelper.create_remote_dir(sshcfg, os.sep.join([SUBDIR_2, SUB_SUBDIR_2]))
 
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
-        entries = os.listdir(mountpoint)
-        self.assertTrue(SUBDIR_1 in entries)
-        self.assertTrue(SUBDIR_2 in entries)
+
+        path, dirs, files = os.walk(mountpoint).next()
+        self.assertTrue(SUBDIR_1 in dirs)
+        self.assertTrue(SUBDIR_2 in dirs)
+        self.assertEqual(2, len(dirs))
+        self.assertEqual(0, len(files))
 
         cache_root = self.cfg.cache_manager.cache_root_dir
 
-        cache_entries = os.listdir(mountpoint)
-        self.assertEqual(sorted([SUBDIR_1, SUBDIR_2]), sorted(cache_entries))
+        subdir2_path = os.sep.join([mountpoint, SUBDIR_2])
+        path, dirs, files = os.walk(subdir2_path).next()
+        self.assertEqual(1, len(dirs))
+        self.assertEqual(0, len(files))
+        self.assertEqual(sorted([SUB_SUBDIR_2]), sorted(dirs))
 
-        entries_subdir2 = os.listdir(os.sep.join([mountpoint, SUBDIR_2]))
-        self.assertEqual([SUB_SUBDIR_2], entries_subdir2)
+        sub_subdir2_path = os.sep.join([mountpoint, SUBDIR_2, SUB_SUBDIR_2])
+        path, dirs, files = os.walk(sub_subdir2_path).next()
+        self.assertEqual(0, len(dirs))
+        self.assertEqual(0, len(files))
 
+    @logger_tm
+    def test_directories_and_files(self):
+        SUBDIR_1 = 'subdir1'
+        FILE_1 = 'file1'
+        FILE_1_CONTENT = 'file1 content'
+
+        FILE_2 = os.sep.join([SUBDIR_1, 'file2'])
+        FILE_2_CONTENT = 'file2 content'
+
+        sshcfg = self.cfg.ssh
+        TestHelper.create_remote_dir(sshcfg, SUBDIR_1)
+        TestHelper.create_remote_file(sshcfg, FILE_2, FILE_2_CONTENT)
+        TestHelper.create_remote_file(sshcfg, FILE_1, FILE_1_CONTENT)
+
+        mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
+        path, dirs, files = os.walk(mountpoint).next()
+        self.assertEqual(1, len(dirs))
+        self.assertEqual(1, len(files))
+        self.assertEqual(FILE_1, files[0])
+
+        file1_path = os.sep.join([mountpoint, files[0]])
+        self.assertEqual(FILE_1_CONTENT, open(file1_path).read())
 
 class CacheManagerModuleTest(unittest.TestCase):
 
@@ -281,11 +311,11 @@ class CacheManagerModuleTest(unittest.TestCase):
         TestHelper.remove_remote_dir(self.sshfs_manager.cfg)
         shutil.rmtree(self.sut.cfg.cache_root_dir)
 
-    @logger_ut
+    @logger_tm
     def test_create_cache_dir(self):
         self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
 
-    @logger_ut
+    @logger_tm
     def test_exists(self):
         file_path = '/TestCacheManager.test_exists.txt'
         TestHelper.create_remote_file(self.sshfs_manager.cfg,
@@ -293,12 +323,12 @@ class CacheManagerModuleTest(unittest.TestCase):
                                       '.' * 5)
         self.assertTrue(self.sut.exists(file_path))
 
-    @logger_ut
+    @logger_tm
     def test_exists_root(self):
         file_path = '/'
         self.assertTrue(self.sut.exists(file_path))
 
-    @logger_ut
+    @logger_tm
     def test_is_file(self):
         file_path = '/TestCacheManager.test_is_file.txt'
         TestHelper.create_remote_file(self.sshfs_manager.cfg,
@@ -308,7 +338,7 @@ class CacheManagerModuleTest(unittest.TestCase):
         self.assertTrue(self.sut.is_file(file_path))
         self.assertFalse(self.sut.is_dir(file_path))
 
-    @logger_ut
+    @logger_tm
     def test_is_dir(self):
         dir_path = '/TestCacheManager.test_is_dir'
         TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)
@@ -316,7 +346,7 @@ class CacheManagerModuleTest(unittest.TestCase):
         self.assertTrue(self.sut.is_dir(dir_path))
         self.assertFalse(self.sut.is_file(dir_path))
 
-    @logger_ut
+    @logger_tm
     def test_get_path_to_file(self):
         file_path = '/TestCacheManager.test_get_path_to_file.txt'
         file_content = '?' * 7
@@ -329,7 +359,7 @@ class CacheManagerModuleTest(unittest.TestCase):
         #self.assertTrue(os.path.exists(cached_filepath))
         #self.assertEqual(file_content, open(cached_filepath).read())
 
-    @logger_ut
+    @logger_tm
     def test_get_path_to_file_twice_on_differrent_files(self):
 
         dir_path = '/TestCacheManager.test_get_path_to_file_twice_on_differrent_files'
@@ -358,7 +388,7 @@ class CacheManagerModuleTest(unittest.TestCase):
         #self.assertTrue(os.path.exists(cached_filepath2))
         #self.assertEqual(file_content2, open(cached_filepath2).read())
 
-    @logger_ut
+    @logger_tm
     def test_list_dir(self):
         dir_path = "/TestCacheManager.test_list_dir"
         TestHelper.create_remote_dir(self.sshfs_manager.cfg, dir_path)

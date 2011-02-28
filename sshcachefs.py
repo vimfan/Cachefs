@@ -196,6 +196,9 @@ class CacheManager(object):
 
         @property
         def files(self):
+            stamp = CacheManager.CachedDirWalker.INITIALIZATION_STAMP
+            if self._files.count(stamp):
+                self._files.remove(stamp)
             return list(set(([
                 self.reverse_transform_filename(filename) for filename in self._files
                 ])))
