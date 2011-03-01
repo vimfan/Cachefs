@@ -59,6 +59,15 @@ class TestHelper:
         fnull = open(os.devnull, 'w')
         assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
 
+    @staticmethod
+    def remove_remote_file(cfg, subpath):
+        assert(isinstance(cfg, config.Config.SshfsManagerConfig))
+        remote_file = os.sep.join([cfg.remote_dir, subpath])
+        standalone_cmd = " ".join(['rm', '-rf', remote_file])
+        user_host = "@".join([cfg.user, cfg.server])
+        call_args = [cfg.ut_ssh_bin, user_host, standalone_cmd]
+        fnull = open(os.devnull, 'w')
+        assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
 
     @staticmethod
     def create_remote_file(cfg, rel_path, content = ''):
@@ -278,22 +287,42 @@ class SshCacheFsModuleTest(unittest.TestCase):
         FILE_1 = 'file1'
         FILE_1_CONTENT = 'file1 content'
 
-        FILE_2 = os.sep.join([SUBDIR_1, 'file2'])
+        FILE_2 = 'file2'
+        FILE_2_SUBPATH = os.sep.join([SUBDIR_1, FILE_2])
         FILE_2_CONTENT = 'file2 content'
 
         sshcfg = self.cfg.ssh
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_1)
-        TestHelper.create_remote_file(sshcfg, FILE_2, FILE_2_CONTENT)
         TestHelper.create_remote_file(sshcfg, FILE_1, FILE_1_CONTENT)
+        TestHelper.create_remote_dir(sshcfg, SUBDIR_1)
+        TestHelper.create_remote_file(sshcfg, FILE_2_SUBPATH, FILE_2_CONTENT)
 
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
+
         self.assertEqual(1, len(dirs))
+        self.assertEqual(SUBDIR_1, dirs[0])
+
         self.assertEqual(1, len(files))
         self.assertEqual(FILE_1, files[0])
 
         file1_path = os.sep.join([mountpoint, files[0]])
         self.assertEqual(FILE_1_CONTENT, open(file1_path).read())
+
+        dir_path = os.sep.join([mountpoint, dirs[0]])
+
+        def check_file():
+            path, dirs, files = os.walk(dir_path).next()
+            self.assertEqual(1, len(files))
+            self.assertEqual(FILE_2, files[0])
+            file2_path = os.sep.join([mountpoint, SUBDIR_1, FILE_2])
+            os.path.islink(file2_path)
+            self.assertEqual(FILE_2_CONTENT, open(file2_path).read())
+
+        check_file()
+        TestHelper.remove_remote_file(sshcfg, FILE_2_SUBPATH)
+        check_file() # after removing file remote it shall remain in cache
+                     # contextual way of checking if cache is really working
+
 
 class CacheManagerModuleTest(unittest.TestCase):
 
