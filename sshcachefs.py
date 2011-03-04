@@ -334,25 +334,18 @@ class CacheManager(object):
         return CacheManager.CachedDirWalker(
             os.path.dirname(rel_path).transform_dirname(os.path.basename(rel_path)))
 
-
     @method_logger
     def exists(self, rel_path):
-        #assert(self.sshfs_access.is_serving())
-
         cached_path = self._cache_path(rel_path)
         if os.path.exists(cached_path):
             return True
 
         dirpath = os.path.dirname(cached_path)
         if (os.path.exists(dirpath)
-                and self._has_initialization_stamp(dirpath)
-                and os.path.exists(cached_path)):
-            if os.path.exists(transform_filename(rel_path)):
-                self._create_local_copy(rel_path)
-                os.path.remove(transform_filename(rel_path))
+                and self._has_initialization_stamp(dirpath)):
+            if os.path.exists(transform_filename(cached_path)):
                 return True
-            if os.path.exists(transform_dirname(rel_path)):
-                os.path.remove(cached_path)
+            if os.path.exists(transform_dirname(cached_path)):
                 return True
 
         remote_path = self._absolute_remote_path(rel_path)
