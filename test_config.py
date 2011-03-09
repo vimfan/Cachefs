@@ -1,9 +1,12 @@
 import config
 import os
+import time
 
 def getConfig():
     test_config                      = config.getConfig()
-    common_prefix                    = '/home/seba/job/nsn/ssh_cache_fs/test'
+    test_config.ut_tests_root        = '/home/seba/job/nsn/ssh_cache_fs/test'
+    common_prefix                    = os.sep.join([test_config.ut_tests_root, 'current'])
+    test_config.ut_current_tc        = common_prefix
 
     # sshfs specific configuration options
     sshfs_prefix                     = os.sep.join([common_prefix, 'sshfs'])
