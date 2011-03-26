@@ -41,8 +41,8 @@ LOG_FILENAME = "logs/LOG%s" % os.getpid()
 #LOG_FILENAME='/dev/null'
 logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
 
-if os.path.exists("LOG"):
-    os.remove("LOG")
+if os.path.exists(LOG_FILENAME):
+    os.remove(LOG_FILENAME)
 if os.path.lexists("LOG"):
     os.unlink("LOG")
 
