@@ -37,12 +37,17 @@ import config as config_canonical
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
 
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+
 LOG_FILENAME = "logs/LOG%s" % os.getpid()
 #LOG_FILENAME='/dev/null'
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
 
 if os.path.exists(LOG_FILENAME):
     os.remove(LOG_FILENAME)
+
+logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
+
 if os.path.lexists("LOG"):
     os.unlink("LOG")
 
