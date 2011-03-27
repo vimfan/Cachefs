@@ -401,28 +401,35 @@ class SymbolicLinks(SshCacheFsModuleTest):
 
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
 
-        normalized_filepath = os.sep.join([mountpoint, 'a/b/c'])
-        self.assertTrue(os.path.exists(normalized_filepath))
-        self.assertTrue(os.path.isdir(normalized_filepath))
+        full_path = os.sep.join([mountpoint, 'a/b/c'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.isdir(full_path))
 
-        normalized_filepath = os.sep.join([mountpoint, 'e/f/g'])
-        self.assertTrue(os.path.exists(normalized_filepath))
-        self.assertTrue(os.path.isdir(normalized_filepath))
+        full_path = os.sep.join([mountpoint, 'e/f/g'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.isdir(full_path))
 
-        normalized_filepath = os.sep.join([mountpoint, 'e/f/g/1.txt'])
-        self.assertTrue(os.path.exists(normalized_filepath))
-        self.assertTrue(os.path.isfile(normalized_filepath))
+        full_path = os.sep.join([mountpoint, 'e/f/g/1.txt'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.isfile(full_path))
 
-        normalized_filepath = os.sep.join([mountpoint, 'i/f/g/2.txt'])
-        self.assertTrue(os.path.exists(normalized_filepath))
-        self.assertTrue(os.path.isfile(normalized_filepath))
+        full_path = os.sep.join([mountpoint, 'i/f/g/2.txt'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.isfile(full_path))
 
         TestHelper.execute_remote(self.cfg.ssh, '''ls e/f/g/ -lh''')
 
-        normalized_filepath = os.sep.join([mountpoint, 'e/f/g/j'])
-        self.assertTrue(os.path.exists(normalized_filepath))
-        self.assertTrue(os.path.islink(normalized_filepath))
+        full_path = os.sep.join([mountpoint, 'e/f/g/j'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.islink(full_path))
 
+        full_path = os.sep.join([mountpoint, 'e/f/g/j/2.txt'])
+        self.assertTrue(os.path.exists(full_path))
+        self.assertTrue(os.path.isfile(full_path))
+        self.assertTrue(os.path.islink(full_path))
+
+        full_path = os.sep.join([mountpoint, 'e/f/g/j/1.txt'])
+        self.assertFalse(os.path.exists(full_path))
 
 
 class CacheManagerModuleTest(ModuleTestCase):

@@ -275,7 +275,6 @@ class CacheManager(object):
 
     @method_logger
     def list_dir(self, rel_path):
-        # TODO: remove cache stamp
         assert(self.sshfs_access.is_serving())
         path_to_cache = self._get_path_to_cached_file(rel_path)
         if not path_to_cache:
@@ -296,7 +295,7 @@ class CacheManager(object):
             not_cached_dirs = list(set(remote_dir_walker.dirs) - set(cache_walker.dirs))
 
             for filename in not_cached_files:
-                os.symlink(filename, os.sep.join([path_to_cache, 
+                os.symlink(filename, os.sep.join([path_to_cache,
                                                   self.path_transformer.transform_filepath(filename)]))
 
             for dirname in not_cached_dirs:
@@ -306,6 +305,11 @@ class CacheManager(object):
             self._create_dir_init_stamp(rel_path)
 
         cache_walker = self._create_cached_dir_walker(path_to_cache)
+        dir_cache_stamp = self.path_transformer.transform_dirpath(path_to_cache)
+        logging.debug(dir_cache_stamp)
+        if os.path.lexists(dir_cache_stamp):
+            os.rmdir(dir_cache_stamp)
+
         return cache_walker.files + cache_walker.dirs
 
     @method_logger
@@ -317,48 +321,36 @@ class CacheManager(object):
             debug(path_to_cache)
             st = os.lstat(path_to_cache)
             if stat.S_ISREG(st.st_mode):
-                debug('1')
                 return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
             elif stat.S_ISLNK(st.st_mode):
                 return st
             else:
-                debug('2')
                 return st
         except OSError, ex:
-            debug('3')
             debug(ex)
             if self._has_init_stamp(os.path.dirname(path_to_cache)):
-                debug('4')
                 filepath = self.path_transformer.transform_filepath(path_to_cache)
                 if os.path.lexists(filepath):
-                    debug('5')
                     return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
                 else:
                     try:
-                        debug('6')
                         dirpath = self.path_transformer.transform_dirpath(path_to_cache)
                         return os.lstat(dirpath)
                     except OSError, ex:
-                        debug('7')
                         debug(ex)
-                        logging.debug("has_init_stamp(%s) = True" % path_to_cache)
                         return None
             else:
                 try:
-                    debug('8')
                     path_to_remote = self._absolute_remote_path(relative_path)
                     debug(path_to_remote)
                     st = os.lstat(path_to_remote)
                     self._create_cache_stamp(path_to_cache, st.st_mode)
                     if stat.S_ISREG(st.st_mode):
-                        debug('1')
                         return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
                     else:
                         return st
                 except OSError, ex:
-                    debug('9')
                     debug(ex)
-                    logging.debug("has_init_stamp(%s) = False" % path_to_cache)
                     return None
 
     @method_logger
@@ -449,6 +441,7 @@ class CacheManager(object):
     def _create_local_copy(self, rel_filepath):
         src = os.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
         dst = self._cache_path(rel_filepath)
+        stamp = self.path_transformer.transform_filepath(dst)
         parent_dir = os.path.dirname(dst)
         if not os.path.exists(parent_dir):
             os.makedirs(parent_dir)
@@ -458,9 +451,8 @@ class CacheManager(object):
         else:
             shutil.copyfile(src, dst)
             shutil.copymode(src, dst)
-            stamp = self.path_transformer.transform_filepath(dst)
-            if os.path.lexists(stamp):
-                os.unlink(stamp)
+        if os.path.lexists(stamp):
+            os.unlink(stamp)
 
     def _get_path_to_cached_file(self, rel_filepath):
         full_path = self._cache_path(rel_filepath)
