@@ -261,11 +261,17 @@ class CacheManager(object):
     @method_logger
     def read_link(self, rel_filepath):
         cache_filepath = self._get_path_to_cached_file(rel_filepath)
+        if cache_filepath and os.path.islink(cache_filepath):
+            return os.readlink(cache_filepath)
         if not cache_filepath:
             self._create_local_copy(rel_filepath)
             cache_filepath = self._get_path_to_cached_file(rel_filepath)
-            self._remove_file_stamp(rel_filepath)
-        return cache_filepath
+            assert(cache_filepath)
+
+        if os.path.islink(cache_filepath):
+            return os.readlink(cache_filepath)
+        else:
+            return cache_filepath
 
     @method_logger
     def list_dir(self, rel_path):
@@ -308,15 +314,19 @@ class CacheManager(object):
             logging.debug(msg)
         try:
             path_to_cache = self._cache_path(relative_path)
-            st = os.stat(path_to_cache)
+            debug(path_to_cache)
+            st = os.lstat(path_to_cache)
             if stat.S_ISREG(st.st_mode):
                 debug('1')
                 return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
+            elif stat.S_ISLNK(st.st_mode):
+                return st
             else:
                 debug('2')
                 return st
-        except OSError:
+        except OSError, ex:
             debug('3')
+            debug(ex)
             if self._has_init_stamp(os.path.dirname(path_to_cache)):
                 debug('4')
                 filepath = self.path_transformer.transform_filepath(path_to_cache)
@@ -327,24 +337,27 @@ class CacheManager(object):
                     try:
                         debug('6')
                         dirpath = self.path_transformer.transform_dirpath(path_to_cache)
-                        return os.stat(dirpath)
-                    except OSError:
+                        return os.lstat(dirpath)
+                    except OSError, ex:
                         debug('7')
+                        debug(ex)
                         logging.debug("has_init_stamp(%s) = True" % path_to_cache)
                         return None
             else:
                 try:
                     debug('8')
                     path_to_remote = self._absolute_remote_path(relative_path)
-                    st = os.stat(path_to_remote)
+                    debug(path_to_remote)
+                    st = os.lstat(path_to_remote)
                     self._create_cache_stamp(path_to_cache, st.st_mode)
                     if stat.S_ISREG(st.st_mode):
                         debug('1')
-                        return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
+                        return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
                     else:
                         return st
-                except OSError:
+                except OSError, ex:
                     debug('9')
+                    debug(ex)
                     logging.debug("has_init_stamp(%s) = False" % path_to_cache)
                     return None
 
@@ -375,11 +388,11 @@ class CacheManager(object):
     @method_logger
     def exists(self, rel_path):
         cached_path = self._cache_path(rel_path)
-        if os.path.exists(cached_path):
+        if os.path.lexists(cached_path):
             return True
 
         filepath_transformed = self.path_transformer.transform_filepath(cached_path)
-        if os.path.exists(filepath_transformed):
+        if os.path.lexists(filepath_transformed):
             return True
 
         dirpath = os.path.dirname(cached_path)
@@ -391,13 +404,13 @@ class CacheManager(object):
         if not os.path.lexists(remote_path): # TODO: can be optimized (cache parent path)
             logging.debug("lexists return false remote_path: %s" % remote_path)
             return False
-        remote_stat = os.stat(remote_path)
+        remote_stat = os.lstat(remote_path)
         if stat.S_ISDIR(remote_stat.st_mode):
             os.makedirs(cached_path)
         elif stat.S_ISREG(remote_stat.st_mode):
             self._create_file_stamp(rel_path)
         elif stat.S_ISLNK(remote_stat.st_mode):
-            logging.error("To be implemented")
+            self._create_local_copy(rel_path)
         else:
             logging.error("filetype not supported")
 
@@ -405,6 +418,9 @@ class CacheManager(object):
 
     def _create_dir_init_stamp(self, rel_dirpath):
         os.symlink('.', self._get_init_stamp(rel_dirpath))
+
+    def _remove_dir_init_stamp(self, rel_dirpath):
+        os.unlink(self._get_init_stamp(rel_dirpath))
 
     def _create_file_stamp(self, rel_filepath):
         path_to_cache = self._cache_path(rel_filepath)
@@ -416,7 +432,7 @@ class CacheManager(object):
         path_to_cache = self._cache_path(rel_filepath)
         stamp = self.path_transformer.transform_filepath(path_to_cache)
         if not os.path.lexists(stamp):
-            os.path.remove(stamp)
+            os.unlink(stamp)
 
     def _create_dir_walker(self, path):
         return CacheManager.DirWalker(path)
@@ -436,11 +452,19 @@ class CacheManager(object):
         parent_dir = os.path.dirname(dst)
         if not os.path.exists(parent_dir):
             os.makedirs(parent_dir)
-        shutil.copyfile(src, dst)
+        if os.path.islink(src):
+            link_content = os.readlink(src)
+            os.symlink(link_content, dst)
+        else:
+            shutil.copyfile(src, dst)
+            shutil.copymode(src, dst)
+            stamp = self.path_transformer.transform_filepath(dst)
+            if os.path.lexists(stamp):
+                os.unlink(stamp)
 
     def _get_path_to_cached_file(self, rel_filepath):
         full_path = self._cache_path(rel_filepath)
-        if os.path.exists(full_path):
+        if os.path.lexists(full_path):
             return full_path
         return None
 

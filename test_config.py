@@ -18,7 +18,8 @@ def getConfig():
     test_config.ssh.remote_dir       = os.sep.join([sshfs_prefix, 'remote_dir'])
     test_config.ssh.sshfs_mountpoint = os.sep.join([sshfs_prefix, 'sshfs_mountpoint'])
     test_config.ssh.wait_for_mount   = 3.0
-    test_config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
+    #test_config.ssh.sshfs_options    = ['-f', '-o', 'follow_symlinks']
+    test_config.ssh.sshfs_options    = ['-f', '-o', 'transform_symlinks']
 
     # cache manager specific config options
     cache_prefix                            = common_prefix

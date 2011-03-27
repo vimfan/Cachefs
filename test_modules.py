@@ -82,6 +82,24 @@ class TestHelper:
         assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
         named_tmp_file.close() # automatically will be removed
 
+    @staticmethod
+    def execute_remote(cfg, script):
+        rel_path = 'remote_cmd.sh'
+        named_tmp_file = tempfile.NamedTemporaryFile('wx+b')
+        named_tmp_file.write(script)
+        named_tmp_file.flush()
+        os.chmod(named_tmp_file.name, 0777)
+        user_host = "@".join([cfg.user, cfg.server])
+        script_path = os.sep.join([cfg.remote_dir, rel_path])
+        user_host_path = ":".join([user_host, script_path])
+        call_args = [cfg.ut_scp_bin, named_tmp_file.name, user_host_path]
+        fnull = open(os.devnull, 'w')
+        assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
+        named_tmp_file.close() # automatically will be removed
+        # execute:
+        call_args = [cfg.ut_ssh_bin, user_host, "cd %s; %s" % (cfg.remote_dir, script_path)]
+        print subprocess.Popen(call_args, shell = False, stdout = subprocess.PIPE).communicate()[0]
+
 class ModuleTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -90,8 +108,8 @@ class ModuleTestCase(unittest.TestCase):
         testcase_current = cfg.ut_current_tc
         tc_wdir = self.__test_dir = os.sep.join([tests_root, self.__class__.__name__])
 
-        if os.path.exists(tc_wdir):
-            shutil.rmtree(tc_wdir)
+        #if os.path.exists(tc_wdir):
+            #shutil.rmtree(tc_wdir)
         os.makedirs(tc_wdir)
         if os.path.lexists(testcase_current):
             os.remove(testcase_current)
@@ -250,6 +268,7 @@ class TestDirectoriesOnly(SshCacheFsModuleTest):
 
     @logger_tm
     def test(self):
+        '''Directories'''
         SUBDIR_1 = 'subdir1'
         SUBDIR_2 = 'subdir2'
         SUB_SUBDIR_2 = 'subdir2.1'
@@ -284,6 +303,7 @@ class TestDirectoriesAndFiles(SshCacheFsModuleTest):
 
     @logger_tm
     def test(self):
+        '''Directories and files'''
         SUBDIR_1 = 'subdir1'
         FILE_1 = 'file1'
         FILE_1_CONTENT = 'file1 content'
@@ -327,6 +347,7 @@ class TestDirectoriesAndFiles(SshCacheFsModuleTest):
 class RelativePaths(SshCacheFsModuleTest):
 
     def test(self):
+        '''Relative paths'''
 
         SUBDIR = 'subdir'
         FILE = 'file'
@@ -362,6 +383,46 @@ class RelativePaths(SshCacheFsModuleTest):
         FILE2_RELATIVE = 'subdir/./subdir2/subdir3/../file2'
         rel_filepath2 = os.sep.join([mountpoint, FILE2_RELATIVE])
         self.assertEqual(FILE_CONTENT_2, open(rel_filepath2).read())
+
+class SymbolicLinks(SshCacheFsModuleTest):
+
+    def test(self):
+        '''Symbolic links'''
+        TestHelper.execute_remote(self.cfg.ssh, '''
+            mkdir -p a/b/c
+
+            mkdir -p e/f/g
+            touch e/f/g/1.txt
+
+            mkdir -p i/f/g
+            touch i/f/g/2.txt
+
+            ln -s ../../../i/f/g e/f/g/j''')
+
+        mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
+
+        normalized_filepath = os.sep.join([mountpoint, 'a/b/c'])
+        self.assertTrue(os.path.exists(normalized_filepath))
+        self.assertTrue(os.path.isdir(normalized_filepath))
+
+        normalized_filepath = os.sep.join([mountpoint, 'e/f/g'])
+        self.assertTrue(os.path.exists(normalized_filepath))
+        self.assertTrue(os.path.isdir(normalized_filepath))
+
+        normalized_filepath = os.sep.join([mountpoint, 'e/f/g/1.txt'])
+        self.assertTrue(os.path.exists(normalized_filepath))
+        self.assertTrue(os.path.isfile(normalized_filepath))
+
+        normalized_filepath = os.sep.join([mountpoint, 'i/f/g/2.txt'])
+        self.assertTrue(os.path.exists(normalized_filepath))
+        self.assertTrue(os.path.isfile(normalized_filepath))
+
+        TestHelper.execute_remote(self.cfg.ssh, '''ls e/f/g/ -lh''')
+
+        normalized_filepath = os.sep.join([mountpoint, 'e/f/g/j'])
+        self.assertTrue(os.path.exists(normalized_filepath))
+        self.assertTrue(os.path.islink(normalized_filepath))
+
 
 
 class CacheManagerModuleTest(ModuleTestCase):
@@ -487,6 +548,8 @@ class ListDir(CacheManagerModuleTest):
 
         self.assertTrue(self.sut.exists(dir_path))
         list_dir_out = self.sut.list_dir(dir_path)
+        self.assertTrue(self.sut._has_init_stamp(dir_path))
+
         input = [file_name, subdir_name]
         self.assertEqual(sorted(input), sorted(list_dir_out))
 
@@ -494,7 +557,6 @@ class ListDir(CacheManagerModuleTest):
         cache_dir_walker = sshcachefs.CacheManager.CachedDirWalker(cache_root_path)
         path_transformer = sshcachefs.CacheManager.PathTransformer()
 
-        self.assertTrue(self.sut._has_init_stamp(dir_path))
 
         cached_subdir_path = os.sep.join(
             [cache_root_path, dir_path, path_transformer.transform_dirpath(subdir_name)])
