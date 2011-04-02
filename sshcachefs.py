@@ -53,14 +53,30 @@ if os.path.lexists("LOG"):
 
 os.symlink(LOG_FILENAME, "LOG")
 
+def DEBUG(msg):
+    logging.debug(msg)
+
+depth = 0
 def method_logger(f):
     def wrapper(*args, **kw):
+        global depth
         try:
             class_name = args[0].__class__.__name__
             func_name = f.func_name
-            logging.debug("--> %s.%s(args: %s, kw: %s)" % (class_name, func_name, args[1:], kw))
+            depth += 1
+            logging.debug("%s:%s {-%s- %s.%s(args: %s, kw: %s)" %
+                          (f.func_code.co_filename,
+                           f.func_code.co_firstlineno,
+                           depth,
+                           class_name, func_name,
+                           args[1:], kw))
             retval = f(*args, **kw)
-            logging.debug("<--%s.%s(...) -> returns: %r" % (class_name, func_name, retval))
+            logging.debug("%s:%s -%s-} %s.%s(...) -> returns: %s(%r)" %
+                          (f.func_code.co_filename,
+                           f.func_code.co_firstlineno,
+                           depth,
+                           class_name, func_name, type(retval), retval))
+            depth -= 1
 
             return retval
         except Exception, inst:
@@ -190,10 +206,34 @@ class CacheManager(object):
 
     class DirWalker(object):
 
-        def __init__(self, path):
-            '''For given path get: path, subdirs, files'''
-            self.path, self.dirs, self.files = os.walk(path).next()
+        @staticmethod
+        def walk(dirpath):
+            dirs, files, links = [], [], []
+            try:
+                for entry in os.listdir(dirpath):
+                    try:
+                        full_path = os.sep.join([dirpath, entry])
+                        st_mode = os.lstat(full_path).st_mode
+                        if stat.S_ISREG(st_mode):
+                            files.append(entry)
+                        elif stat.S_ISDIR(st_mode):
+                            dirs.append(entry)
+                        elif stat.S_ISLNK(st_mode):
+                            links.append(entry)
+                        else:
+                            DEBUG("unsupported type of file %s" % full_path)
+                    except OSError:
+                        DEBUG("cannot stat: %s" % full_path)
+            except StopIteration, e:
+                DEBUG("STOP ITERATION: %s" % e)
+                DEBUG("VALUES: %s %s %s" % (path, dirs, files))
 
+            return dirs, files, links
+
+        def __init__(self, dirpath):
+            '''For given directory path get: subdirs, files, links in the dir'''
+            self.dirs, self.files, self.links = CacheManager.DirWalker.walk(dirpath)
+            
     class PathTransformer(object):
 
         FILE_SUFFIX = 'filecache'
@@ -220,18 +260,22 @@ class CacheManager(object):
         INITIALIZATION_STAMP = '.cache_initialized'
 
         def __init__(self, path):
-            '''For given path get: path, subdirs, files'''
-            self.path, self._dirs, self._files = os.walk(path).next()
+            try:
+                self._dirs, self._files, self._links = CacheManager.DirWalker.walk(path)
+            except StopIteration, e:
+                DEBUG("STOP ITERATION: %s" % e)
+                DEBUG("VALUES: %s %s %s" % (self._dirs, self._files, self._links))
             self.path_transformer = CacheManager.PathTransformer()
 
         @property
         def files(self):
             stamp = CacheManager.CachedDirWalker.INITIALIZATION_STAMP
-            if self._files.count(stamp):
-                self._files.remove(stamp)
+            if self._links.count(stamp):
+                self._links.remove(stamp)
+            all_files = self._files + list(set(self._links) - set(self.links))
             return list(set(([
-                self.path_transformer.reverse_transform_filepath(filename) for filename in self._files
-                ])))
+                self.path_transformer.reverse_transform_filepath(filename) 
+                for filename in all_files])))
 
         @property
         def dirs(self):
@@ -241,6 +285,12 @@ class CacheManager(object):
             return list(set(([
                 self.path_transformer.reverse_transform_dirpath(dirname) for dirname in self._dirs
                 ])))
+
+        @property
+        def links(self):
+            return filter(lambda link: not link.endswith(CacheManager.PathTransformer.FILE_SUFFIX),
+                          self._links)
+
        
     def __init__(self, cfg, sshfs_access):
         assert(isinstance(cfg, config_canonical.Config.CacheManagerConfig))
@@ -275,42 +325,14 @@ class CacheManager(object):
 
     @method_logger
     def list_dir(self, rel_path):
-        assert(self.sshfs_access.is_serving())
         path_to_cache = self._get_path_to_cached_file(rel_path)
-        if not path_to_cache:
-            logging.debug("list_dir(): %s not in cache" % rel_path)
-            return -errno.ENOENT
-        if not stat.S_ISDIR(os.stat(path_to_cache).st_mode):
-            logging.debug("list_dir(): %s in cache, but it is not a dir" % rel_path)
-            return -errno.ENOENT
-
-        if not self._has_init_stamp(rel_path): # which means dir never been readdired
-            remote_path = self._absolute_remote_path(rel_path)
-            if not os.path.exists(remote_path):
-                return -errno.ENOENT
-
-            cache_walker = self._create_cached_dir_walker(path_to_cache)
-            remote_dir_walker = self._create_dir_walker(remote_path)
-            not_cached_files = list(set(remote_dir_walker.files) - set(cache_walker.files))
-            not_cached_dirs = list(set(remote_dir_walker.dirs) - set(cache_walker.dirs))
-
-            for filename in not_cached_files:
-                os.symlink(filename, os.sep.join([path_to_cache,
-                                                  self.path_transformer.transform_filepath(filename)]))
-
-            for dirname in not_cached_dirs:
-                os.mkdir(os.sep.join(
-                    [path_to_cache, self.path_transformer.transform_dirpath(dirname)]))
-
-            self._create_dir_init_stamp(rel_path)
-
+        #if not path_to_cache:
+            #path_to_cache = self._cache_path(rel_path)
+            #os.makedirs(path_to_cache)
+        #if not self._has_init_stamp(rel_path): 
+            #self._cache_directory(rel_path)
         cache_walker = self._create_cached_dir_walker(path_to_cache)
-        dir_cache_stamp = self.path_transformer.transform_dirpath(path_to_cache)
-        logging.debug(dir_cache_stamp)
-        if os.path.lexists(dir_cache_stamp):
-            os.rmdir(dir_cache_stamp)
-
-        return cache_walker.files + cache_walker.dirs
+        return cache_walker.files + cache_walker.dirs + cache_walker.links
 
     @method_logger
     def get_attributes(self, relative_path):
@@ -318,40 +340,94 @@ class CacheManager(object):
             logging.debug(msg)
         try:
             path_to_cache = self._cache_path(relative_path)
-            debug(path_to_cache)
             st = os.lstat(path_to_cache)
             if stat.S_ISREG(st.st_mode):
                 return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
             elif stat.S_ISLNK(st.st_mode):
                 return st
             else:
+                if not self._has_init_stamp(relative_path):
+                    try:
+                        self._cache_directory(relative_path)
+                    except:
+                        debug("OOPS")
                 return st
         except OSError, ex:
             debug(ex)
-            if self._has_init_stamp(os.path.dirname(path_to_cache)):
+            path_dir = os.path.dirname(relative_path)
+            has_stamp = self._has_init_stamp(path_dir)
+            #if path_dir <> relative_path and has_stamp:
+            if has_stamp:
                 filepath = self.path_transformer.transform_filepath(path_to_cache)
                 if os.path.lexists(filepath):
-                    return Stat(stat.S_IFLNK | 0755, 0, 1, os.getuid(), os.getgid())
-                else:
-                    try:
-                        dirpath = self.path_transformer.transform_dirpath(path_to_cache)
-                        return os.lstat(dirpath)
-                    except OSError, ex:
-                        debug(ex)
-                        return None
-            else:
+                    return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
                 try:
-                    path_to_remote = self._absolute_remote_path(relative_path)
-                    debug(path_to_remote)
-                    st = os.lstat(path_to_remote)
-                    self._create_cache_stamp(path_to_cache, st.st_mode)
-                    if stat.S_ISREG(st.st_mode):
-                        return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
+                    dirpath = self.path_transformer.transform_dirpath(path_to_cache)
+                    if os.path.exists(dirpath):
+                        self._cache_directory(relative_path)
+                        return os.lstat(path_to_cache)
                     else:
-                        return st
+                        return None
                 except OSError, ex:
                     debug(ex)
                     return None
+            else:
+                try:
+                    path_to_remote = self._absolute_remote_path(relative_path)
+                    st = os.lstat(path_to_remote)
+                    assert(stat.S_ISDIR(st.st_mode))
+                    self._cache_directory(relative_path)
+                    #if stat.S_ISREG(st.st_mode):
+                        #self._create_cache_stamp(path_to_cache, st.st_mode)
+                        #return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
+                    #elif stat.S_ISDIR(st.st_mode):
+                    #else:
+                        #return st
+                except OSError, ex:
+                    debug(ex)
+                    return None
+
+    @method_logger
+    def _cache_directory(self, rel_path):
+        remote_path = self._absolute_remote_path(rel_path)
+        assert(os.path.isdir(remote_path))
+
+        path_to_cache = self._cache_path(rel_path)
+        try:
+            os.mkdir(path_to_cache)
+        except OSError:
+            DEBUG("most likely directory %s already exists" % path_to_cache)
+
+        cache_walker = self._create_cached_dir_walker(path_to_cache)
+        remote_dir_walker = self._create_dir_walker(remote_path)
+        DEBUG("REMOTE PATH: %s" % remote_path)
+
+        not_cached_files = list(set(remote_dir_walker.files) - set(cache_walker.files))
+        DEBUG("NOT CACHED FILES %s" % not_cached_files)
+
+        not_cached_dirs = list(set(remote_dir_walker.dirs) - set(cache_walker.dirs))
+        DEBUG("NOT CACHED DIRS %s" % not_cached_dirs)
+
+        not_cached_links = list(set(remote_dir_walker.links) - set(cache_walker.links))
+        DEBUG("NOT CACHED LINKS %s" % not_cached_links)
+
+        for filename in not_cached_files:
+            transformed_filepath = self.path_transformer.transform_filepath(filename)
+            os.symlink(filename, os.sep.join([path_to_cache, transformed_filepath]))
+
+        for dirname in not_cached_dirs:
+            transformed_dirpath = self.path_transformer.transform_dirpath(dirname)
+            os.mkdir(os.sep.join([path_to_cache,transformed_dirpath]))
+
+        for link in not_cached_links:
+            link_target = os.readlink(os.sep.join([remote_path, link]))
+            os.symlink(link_target, os.sep.join([path_to_cache, link]))
+
+        dir_cache_stamp = self.path_transformer.transform_dirpath(path_to_cache)
+        if os.path.lexists(dir_cache_stamp):
+            os.rmdir(dir_cache_stamp)
+
+        self._create_dir_init_stamp(rel_path)
 
     @method_logger
     def _create_cache_stamp(self, path_to_cache, st_mode):
@@ -370,49 +446,42 @@ class CacheManager(object):
                
     @method_logger
     def is_dir(self, rel_path):
-        cache_path = self._cache_path(rel_path)
-        if (os.path.exists(cache_path)):
-            return os.path.isdir(cache_path)
-        if os.path.exists(self.path_transformer.transform_dirpath(cache_path)):
-            return True
-        return False
+        cached_path = self._cache_path(rel_path)
+        if os.path.lexists(cached_path):
+            return os.path.isdir(cached_path)
+        dirpath = os.path.dirname(cached_path)
+        if self._has_init_stamp(dirpath):
+            transformed_path = self.path_transformer.transform_dirpath(cached_path)
+            return (os.path.exists(cached_path) or os.path.exists(transformed_path))
+        return os.path.isdir(self._absolute_remote_path(rel_path))
 
     @method_logger
     def exists(self, rel_path):
         cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
             return True
-
-        filepath_transformed = self.path_transformer.transform_filepath(cached_path)
-        if os.path.lexists(filepath_transformed):
-            return True
-
-        dirpath = os.path.dirname(cached_path)
+        dirpath = os.path.dirname(rel_path)
         if self._has_init_stamp(dirpath):
-            logging.debug("has_init_stamp %s" % cached_path)
-            return False
-
+            filepath_transformed = self.path_transformer.transform_filepath(cached_path)
+            return os.path.lexists(filepath_transformed)
         remote_path = self._absolute_remote_path(rel_path)
-        if not os.path.lexists(remote_path): # TODO: can be optimized (cache parent path)
-            logging.debug("lexists return false remote_path: %s" % remote_path)
-            return False
-        remote_stat = os.lstat(remote_path)
-        if stat.S_ISDIR(remote_stat.st_mode):
-            os.makedirs(cached_path)
-        elif stat.S_ISREG(remote_stat.st_mode):
-            self._create_file_stamp(rel_path)
-        elif stat.S_ISLNK(remote_stat.st_mode):
-            self._create_local_copy(rel_path)
-        else:
-            logging.error("filetype not supported")
+        return os.path.lexists(remote_path)
 
-        return True
-
+    @method_logger
     def _create_dir_init_stamp(self, rel_dirpath):
         os.symlink('.', self._get_init_stamp(rel_dirpath))
 
+    @method_logger
     def _remove_dir_init_stamp(self, rel_dirpath):
         os.unlink(self._get_init_stamp(rel_dirpath))
+
+    @method_logger
+    def _has_init_stamp(self, rel_dirpath):
+        return os.path.lexists(self._get_init_stamp(rel_dirpath))
+
+    def _get_init_stamp(self, rel_dirpath):
+        return os.sep.join([self._cache_path(rel_dirpath), 
+                            CacheManager.CachedDirWalker.INITIALIZATION_STAMP])
 
     def _create_file_stamp(self, rel_filepath):
         path_to_cache = self._cache_path(rel_filepath)
@@ -432,12 +501,6 @@ class CacheManager(object):
     def _create_cached_dir_walker(self, path):
         return CacheManager.CachedDirWalker(path)
 
-    def _has_init_stamp(self, rel_dirpath):
-        return os.path.exists(self._get_init_stamp(rel_dirpath))
-
-    def _get_init_stamp(self, rel_dirpath):
-        return os.sep.join([self._cache_path(rel_dirpath), CacheManager.CachedDirWalker.INITIALIZATION_STAMP])
-
     def _create_local_copy(self, rel_filepath):
         src = os.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
         dst = self._cache_path(rel_filepath)
@@ -446,8 +509,8 @@ class CacheManager(object):
         if not os.path.exists(parent_dir):
             os.makedirs(parent_dir)
         if os.path.islink(src):
-            link_content = os.readlink(src)
-            os.symlink(link_content, dst)
+            link_target = os.readlink(src)
+            os.symlink(link_target, dst)
         else:
             shutil.copyfile(src, dst)
             shutil.copymode(src, dst)

@@ -99,6 +99,8 @@ class TestHelper:
         # execute:
         call_args = [cfg.ut_ssh_bin, user_host, "cd %s; %s" % (cfg.remote_dir, script_path)]
         print subprocess.Popen(call_args, shell = False, stdout = subprocess.PIPE).communicate()[0]
+        call_args = [cfg.ut_ssh_bin, user_host, "cd %s; rm %s" % (cfg.remote_dir, script_path)]
+        assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
 
 class ModuleTestCase(unittest.TestCase):
 
@@ -247,6 +249,9 @@ class SshCacheFsUnitTest(unittest.TestCase):
 
 class SshCacheFsModuleTest(ModuleTestCase):
 
+    def precondition(self):
+        pass
+
     def setUpImpl(self):
         cfg = self.cfg = TestHelper.get_cfg_for_test()
         mountpoint = cfg.cache_fs.cache_fs_mountpoint
@@ -254,6 +259,7 @@ class SshCacheFsModuleTest(ModuleTestCase):
         if not os.path.exists(mountpoint):
             os.makedirs(mountpoint)
         TestHelper.create_remote_dir(cfg.ssh)
+        self.precondition()
         self.runner = runner.SshCacheFsRunner(test_config)
         self.runner.run()
 
@@ -266,128 +272,141 @@ class SshCacheFsModuleTest(ModuleTestCase):
 
 class TestDirectoriesOnly(SshCacheFsModuleTest):
 
+    SUBDIR_1 = 'subdir1'
+    SUBDIR_2 = 'subdir2'
+    SUB_SUBDIR_2 = 'subdir2.1'
+
+    def precondition(self):
+        sshcfg = self.cfg.ssh
+        TestHelper.create_remote_dir(sshcfg, TestDirectoriesOnly.SUBDIR_1)
+        TestHelper.create_remote_dir(sshcfg, TestDirectoriesOnly.SUBDIR_2)
+        TestHelper.create_remote_dir(sshcfg,
+                                     os.sep.join([TestDirectoriesOnly.SUBDIR_2,
+                                                  TestDirectoriesOnly.SUB_SUBDIR_2]))
+
     @logger_tm
     def test(self):
         '''Directories'''
-        SUBDIR_1 = 'subdir1'
-        SUBDIR_2 = 'subdir2'
-        SUB_SUBDIR_2 = 'subdir2.1'
-
-        sshcfg = self.cfg.ssh
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_1)
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_2)
-        TestHelper.create_remote_dir(sshcfg, os.sep.join([SUBDIR_2, SUB_SUBDIR_2]))
-
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
-
         path, dirs, files = os.walk(mountpoint).next()
-        self.assertTrue(SUBDIR_1 in dirs)
-        self.assertTrue(SUBDIR_2 in dirs)
+        self.assertTrue(TestDirectoriesOnly.SUBDIR_1 in dirs)
+        self.assertTrue(TestDirectoriesOnly.SUBDIR_2 in dirs)
         self.assertEqual(2, len(dirs))
         self.assertEqual(0, len(files))
 
         cache_root = self.cfg.cache_manager.cache_root_dir
 
-        subdir2_path = os.sep.join([mountpoint, SUBDIR_2])
+        subdir2_path = os.sep.join([mountpoint, TestDirectoriesOnly.SUBDIR_2])
         path, dirs, files = os.walk(subdir2_path).next()
         self.assertEqual(1, len(dirs))
         self.assertEqual(0, len(files))
-        self.assertEqual(sorted([SUB_SUBDIR_2]), sorted(dirs))
+        self.assertEqual(sorted([TestDirectoriesOnly.SUB_SUBDIR_2]), sorted(dirs))
 
-        sub_subdir2_path = os.sep.join([mountpoint, SUBDIR_2, SUB_SUBDIR_2])
+        sub_subdir2_path = os.sep.join([mountpoint,
+                                        TestDirectoriesOnly.SUBDIR_2,
+                                        TestDirectoriesOnly.SUB_SUBDIR_2])
         path, dirs, files = os.walk(sub_subdir2_path).next()
         self.assertEqual(0, len(dirs))
         self.assertEqual(0, len(files))
 
 class TestDirectoriesAndFiles(SshCacheFsModuleTest):
 
+    SUBDIR_1 = 'subdir1'
+    FILE_1 = 'file1'
+    FILE_1_CONTENT = 'file1 content'
+
+    FILE_2 = 'file2'
+    FILE_2_SUBPATH = os.sep.join([SUBDIR_1, FILE_2])
+    FILE_2_CONTENT = 'file2 content'
+
+    def precondition(self):
+        sshcfg = self.cfg.ssh
+        cls = TestDirectoriesAndFiles
+        TestHelper.create_remote_file(sshcfg, cls.FILE_1, cls.FILE_1_CONTENT)
+        TestHelper.create_remote_dir(sshcfg, cls.SUBDIR_1)
+        TestHelper.create_remote_file(sshcfg, cls.FILE_2_SUBPATH, cls.FILE_2_CONTENT)
+
     @logger_tm
     def test(self):
         '''Directories and files'''
-        SUBDIR_1 = 'subdir1'
-        FILE_1 = 'file1'
-        FILE_1_CONTENT = 'file1 content'
-
-        FILE_2 = 'file2'
-        FILE_2_SUBPATH = os.sep.join([SUBDIR_1, FILE_2])
-        FILE_2_CONTENT = 'file2 content'
-
-        sshcfg = self.cfg.ssh
-        TestHelper.create_remote_file(sshcfg, FILE_1, FILE_1_CONTENT)
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_1)
-        TestHelper.create_remote_file(sshcfg, FILE_2_SUBPATH, FILE_2_CONTENT)
-
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
 
+        cls = TestDirectoriesAndFiles
+
         self.assertEqual(1, len(dirs))
-        self.assertEqual(SUBDIR_1, dirs[0])
+        self.assertEqual(cls.SUBDIR_1, dirs[0])
 
         self.assertEqual(1, len(files))
-        self.assertEqual(FILE_1, files[0])
+        self.assertEqual(cls.FILE_1, files[0])
 
         file1_path = os.sep.join([mountpoint, files[0]])
-        self.assertEqual(FILE_1_CONTENT, open(file1_path).read())
+        self.assertEqual(cls.FILE_1_CONTENT, open(file1_path).read())
 
         dir_path = os.sep.join([mountpoint, dirs[0]])
 
         def check_file():
             path, dirs, files = os.walk(dir_path).next()
             self.assertEqual(1, len(files))
-            self.assertEqual(FILE_2, files[0])
-            file2_path = os.sep.join([mountpoint, SUBDIR_1, FILE_2])
+            self.assertEqual(cls.FILE_2, files[0])
+            file2_path = os.sep.join([mountpoint, cls.SUBDIR_1, cls.FILE_2])
             os.path.islink(file2_path)
-            self.assertEqual(FILE_2_CONTENT, open(file2_path).read())
+            self.assertEqual(cls.FILE_2_CONTENT, open(file2_path).read())
 
         check_file()
-        TestHelper.remove_remote_file(sshcfg, FILE_2_SUBPATH)
+        TestHelper.remove_remote_file(self.cfg.ssh, cls.FILE_2_SUBPATH)
         check_file() # after removing file remote it shall remain in cache
                      # contextual way of checking if cache is really working
 
 class RelativePaths(SshCacheFsModuleTest):
 
+    SUBDIR = 'subdir'
+    FILE = 'file'
+    FILE_CONTENT = 'content'
+
+    SUBDIR_2 = 'subdir/subdir2'
+    FILE_2 = 'subdir/subdir2/file2'
+    FILE_CONTENT_2 = 'content2'
+
+    SUBDIR_3 = 'subdir/subdir2/subdir3'
+    FILE_3 = 'subdir/subdir2/subdir3/file3'
+    FILE_CONTENT_3 = 'content3'
+
+    def precondition(self):
+        sshcfg = self.cfg.ssh
+        cls = RelativePaths
+        TestHelper.create_remote_dir(sshcfg, cls.SUBDIR)
+        TestHelper.create_remote_file(sshcfg, cls.FILE, cls.FILE_CONTENT)
+
+        TestHelper.create_remote_dir(sshcfg, cls.SUBDIR_2)
+        TestHelper.create_remote_file(sshcfg, cls.FILE_2, cls.FILE_CONTENT_2)
+
+        TestHelper.create_remote_dir(sshcfg, cls.SUBDIR_3)
+        TestHelper.create_remote_file(sshcfg, cls.FILE_3, cls.FILE_CONTENT_3)
+
     def test(self):
         '''Relative paths'''
 
-        SUBDIR = 'subdir'
-        FILE = 'file'
-        FILE_CONTENT = 'content'
-
-        SUBDIR_2 = 'subdir/subdir2'
-        FILE_2 = 'subdir/subdir2/file2'
-        FILE_CONTENT_2 = 'content2'
-
-        SUBDIR_3 = 'subdir/subdir2/subdir3'
-        FILE_3 = 'subdir/subdir2/subdir3/file3'
-        FILE_CONTENT_3 = 'content3'
-
-        sshcfg = self.cfg.ssh
-        TestHelper.create_remote_dir(sshcfg, SUBDIR)
-        TestHelper.create_remote_file(sshcfg, FILE, FILE_CONTENT)
-
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_2)
-        TestHelper.create_remote_file(sshcfg, FILE_2, FILE_CONTENT_2)
-
-        TestHelper.create_remote_dir(sshcfg, SUBDIR_3)
-        TestHelper.create_remote_file(sshcfg, FILE_3, FILE_CONTENT_3)
-
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
+        cls = RelativePaths
 
-        normalized_filepath = os.sep.join([mountpoint, FILE])
-        self.assertEqual(FILE_CONTENT, open(normalized_filepath).read())
+        normalized_filepath = os.sep.join([mountpoint, 'file'])
+        self.assertTrue(os.path.lexists(normalized_filepath))
+        self.assertEqual(cls.FILE_CONTENT, open(normalized_filepath).read())
 
         FILE_RELATIVE = 'subdir/subdir2/subdir3/../../../file'
         rel_filepath = os.sep.join([mountpoint, FILE_RELATIVE])
-        self.assertEqual(FILE_CONTENT, open(rel_filepath).read())
+        self.assertTrue(os.path.lexists(rel_filepath))
+        self.assertEqual(cls.FILE_CONTENT, open(rel_filepath).read())
 
         FILE2_RELATIVE = 'subdir/./subdir2/subdir3/../file2'
         rel_filepath2 = os.sep.join([mountpoint, FILE2_RELATIVE])
-        self.assertEqual(FILE_CONTENT_2, open(rel_filepath2).read())
+        self.assertTrue(os.path.lexists(rel_filepath2))
+        self.assertEqual(cls.FILE_CONTENT_2, open(rel_filepath2).read())
 
 class SymbolicLinks(SshCacheFsModuleTest):
 
-    def test(self):
-        '''Symbolic links'''
+    def precondition(self):
         TestHelper.execute_remote(self.cfg.ssh, '''
             mkdir -p a/b/c
 
@@ -399,6 +418,8 @@ class SymbolicLinks(SshCacheFsModuleTest):
 
             ln -s ../../../i/f/g e/f/g/j''')
 
+    def test(self):
+        '''Symbolic links'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
 
         full_path = os.sep.join([mountpoint, 'a/b/c'])
@@ -416,10 +437,8 @@ class SymbolicLinks(SshCacheFsModuleTest):
         full_path = os.sep.join([mountpoint, 'i/f/g/2.txt'])
         self.assertTrue(os.path.exists(full_path))
         self.assertTrue(os.path.isfile(full_path))
-
-        TestHelper.execute_remote(self.cfg.ssh, '''ls e/f/g/ -lh''')
-
         full_path = os.sep.join([mountpoint, 'e/f/g/j'])
+
         self.assertTrue(os.path.exists(full_path))
         self.assertTrue(os.path.islink(full_path))
 
@@ -454,6 +473,16 @@ class CreateCacheDir(CacheManagerModuleTest):
     @logger_tm
     def test_create_cache_dir(self):
         self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
+
+class DirInitStamp(CacheManagerModuleTest):
+
+    @logger_tm
+    def test_has_init_stamp(self):
+
+        # UT
+        self.assertFalse(self.sut._has_init_stamp('/'))
+        self.sut.get_attributes('/')
+        self.assertTrue(self.sut._has_init_stamp('/'))
 
 class Exists(CacheManagerModuleTest):
 
@@ -554,6 +583,9 @@ class ListDir(CacheManagerModuleTest):
         TestHelper.create_remote_file(self.sshfs_manager.cfg, file_path, 'file_content ... ')
 
         self.assertTrue(self.sut.exists(dir_path))
+        #precond: 
+        self.sut.get_attributes(dir_path)
+
         list_dir_out = self.sut.list_dir(dir_path)
         self.assertTrue(self.sut._has_init_stamp(dir_path))
 
@@ -563,7 +595,6 @@ class ListDir(CacheManagerModuleTest):
         cache_root_path = self.sut.cfg.cache_root_dir 
         cache_dir_walker = sshcachefs.CacheManager.CachedDirWalker(cache_root_path)
         path_transformer = sshcachefs.CacheManager.PathTransformer()
-
 
         cached_subdir_path = os.sep.join(
             [cache_root_path, dir_path, path_transformer.transform_dirpath(subdir_name)])
