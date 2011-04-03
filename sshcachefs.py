@@ -53,6 +53,9 @@ if os.path.lexists("LOG"):
 
 os.symlink(LOG_FILENAME, "LOG")
 
+def NO_LOG(msg):
+    pass
+
 def DEBUG(msg):
     logging.debug(msg)
 
@@ -62,6 +65,8 @@ def INFO(msg):
 def ERROR(msg):
     logging.error(msg)
 
+ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
+
 depth = 0
 def method_logger(f):
     def wrapper(*args, **kw):
@@ -70,14 +75,14 @@ def method_logger(f):
             class_name = args[0].__class__.__name__
             func_name = f.func_name
             depth += 1
-            logging.debug("%s:%s {%s- %s.%s(args: %s, kw: %s)" %
+            DEBUG("%s:%s {%s- %s.%s(args: %s, kw: %s)" %
                           (f.func_code.co_filename,
                            f.func_code.co_firstlineno,
                            depth,
                            class_name, func_name,
                            args[1:], kw))
             retval = f(*args, **kw)
-            logging.debug("%s:%s -%s} %s.%s(...) -> returns: %s(%r)" %
+            DEBUG("%s:%s -%s} %s.%s(...) -> returns: %s(%r)" %
                           (f.func_code.co_filename,
                            f.func_code.co_firstlineno,
                            depth,
@@ -204,6 +209,48 @@ class SshfsManager(object):
                 raise CriticalError("Cannot create directory %s" % mountpoint)
         # else directory is already created and seems to be ready to mounting
 
+class MemoryCache(object):
+
+    class GetattrEntry:
+
+        def __init__(self, st, stamp = None):
+            self.stat = st
+            self.timestamp = stamp
+
+    class ReadlinkEntry:
+        
+        def __init__(self, target, stamp = None):
+            self.target = target
+            self.timestamp = stamp
+
+    def __init__(self):
+        self._getattr = {}
+        self._readlink = {}
+
+    def get_attributes(self, path):
+        DEBUG("MEMORY CACHED_FILE ATTRIBUTES: %s" % len(self._getattr))
+        if self._getattr.has_key(path):
+            entry = self._getattr[path]
+            if entry.timestamp - time.time() > 60:
+                return None
+            return entry
+        return None
+
+    def read_link(self, path):
+        DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
+        if self._readlink.has_key(path):
+            entry = self._readlink[path]
+            if entry.timestamp - time.time() > 60:
+                return None
+            return entry
+        return None
+
+    def cache_attributes(self, path, st = None):
+        self._getattr[path] = MemoryCache.GetattrEntry(st, time.time())
+
+    def cache_link_target(self, path, target):
+        self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
+
 class CacheManager(object):
 
     class DirWalker(object):
@@ -211,24 +258,20 @@ class CacheManager(object):
         @staticmethod
         def walk(dirpath):
             dirs, files, links = [], [], []
-            try:
-                for entry in os.listdir(dirpath):
-                    try:
-                        full_path = os.sep.join([dirpath, entry])
-                        st_mode = os.lstat(full_path).st_mode
-                        if stat.S_ISREG(st_mode):
-                            files.append(entry)
-                        elif stat.S_ISDIR(st_mode):
-                            dirs.append(entry)
-                        elif stat.S_ISLNK(st_mode):
-                            links.append(entry)
-                        else:
-                            DEBUG("unsupported type of file %s" % full_path)
-                    except OSError:
-                        DEBUG("cannot stat: %s" % full_path)
-            except StopIteration, e:
-                DEBUG("STOP ITERATION: %s" % e)
-                DEBUG("VALUES: %s %s %s" % (path, dirs, files))
+            for entry in os.listdir(dirpath):
+                try:
+                    full_path = os.sep.join([dirpath, entry])
+                    st_mode = os.lstat(full_path).st_mode
+                    if stat.S_ISREG(st_mode):
+                        files.append(entry)
+                    elif stat.S_ISDIR(st_mode):
+                        dirs.append(entry)
+                    elif stat.S_ISLNK(st_mode):
+                        links.append(entry)
+                    else:
+                        DEBUG("unsupported type of file %s" % full_path)
+                except OSError:
+                    DEBUG("cannot stat: %s" % full_path)
 
             return dirs, files, links
 
@@ -262,11 +305,7 @@ class CacheManager(object):
         INITIALIZATION_STAMP = '.cache_initialized'
 
         def __init__(self, path):
-            try:
-                self._dirs, self._files, self._links = CacheManager.DirWalker.walk(path)
-            except StopIteration, e:
-                DEBUG("STOP ITERATION: %s" % e)
-                DEBUG("VALUES: %s %s %s" % (self._dirs, self._files, self._links))
+            self._dirs, self._files, self._links = CacheManager.DirWalker.walk(path)
             self.path_transformer = CacheManager.PathTransformer()
 
         @property
@@ -300,6 +339,7 @@ class CacheManager(object):
         self.cfg = cfg
         self.sshfs_access = sshfs_access
         self.path_transformer = CacheManager.PathTransformer()
+        self.memcache = MemoryCache()
 
     @method_logger
     def run(self):
@@ -310,8 +350,7 @@ class CacheManager(object):
         # deliberately don't remove any directories
         pass
 
-    @method_logger
-    def read_link(self, rel_filepath):
+    def _read_link(self, rel_filepath):
         cache_filepath = self._get_path_to_cached_file(rel_filepath)
         if cache_filepath and os.path.islink(cache_filepath):
             return os.readlink(cache_filepath)
@@ -326,20 +365,28 @@ class CacheManager(object):
             return cache_filepath
 
     @method_logger
+    def read_link(self, rel_filepath):
+        target_entry = self.memcache.read_link(rel_filepath)
+        if not target_entry:
+            self.memcache.cache_link_target(rel_filepath, self._read_link(rel_filepath))
+            target_entry = self.memcache.read_link(rel_filepath)
+        return target_entry.target
+
+    @method_logger
     def list_dir(self, rel_path):
         path_to_cache = self._get_path_to_cached_file(rel_path)
-        #if not path_to_cache:
-            #path_to_cache = self._cache_path(rel_path)
-            #os.makedirs(path_to_cache)
-        #if not self._has_init_stamp(rel_path): 
-            #self._cache_directory(rel_path)
         cache_walker = self._create_cached_dir_walker(path_to_cache)
         return cache_walker.files + cache_walker.dirs + cache_walker.links
 
     @method_logger
     def get_attributes(self, relative_path):
-        def debug(msg):
-            logging.debug(msg)
+        memstat = self.memcache.get_attributes(relative_path)
+        if not memstat:
+            self.memcache.cache_attributes(relative_path, self._get_attributes(relative_path))
+            memstat = self.memcache.get_attributes(relative_path)
+        return memstat.stat
+
+    def _get_attributes(self, relative_path):
         try:
             path_to_cache = self._cache_path(relative_path)
             st = os.lstat(path_to_cache)
@@ -352,13 +399,12 @@ class CacheManager(object):
                     try:
                         self._cache_directory(relative_path)
                     except:
-                        debug("OOPS")
+                        DEBUG("OOPS")
                 return st
         except OSError, ex:
-            debug(ex)
+            DEBUG(ex)
             path_dir = os.path.dirname(relative_path)
             has_stamp = self._has_init_stamp(path_dir)
-            #if path_dir <> relative_path and has_stamp:
             if has_stamp:
                 filepath = self.path_transformer.transform_filepath(path_to_cache)
                 if os.path.lexists(filepath):
@@ -371,7 +417,7 @@ class CacheManager(object):
                     else:
                         return None
                 except OSError, ex:
-                    debug(ex)
+                    DEBUG(ex)
                     return None
             else:
                 try:
@@ -379,14 +425,8 @@ class CacheManager(object):
                     st = os.lstat(path_to_remote)
                     assert(stat.S_ISDIR(st.st_mode))
                     self._cache_directory(relative_path)
-                    #if stat.S_ISREG(st.st_mode):
-                        #self._create_cache_stamp(path_to_cache, st.st_mode)
-                        #return Stat(stat.S_IFLNK | 0777, 0, 1, os.getuid(), os.getgid())
-                    #elif stat.S_ISDIR(st.st_mode):
-                    #else:
-                        #return st
                 except OSError, ex:
-                    debug(ex)
+                    DEBUG(ex)
                     return None
 
     @method_logger
@@ -443,12 +483,15 @@ class CacheManager(object):
                 os.symlink('#', stamp)
             return
         else:
-            # TODO implement
+            DEBUG("Don't know how to create cache stamp for '%s'" % path_to_cache)
             return
                
     @method_logger
     def is_dir(self, rel_path):
+        memstat = self.memcache.get_attributes(rel_path)
         cached_path = self._cache_path(rel_path)
+        if memstat.stat:
+            return stat.S_ISDIR(memstat.stat.st_mode)
         if os.path.lexists(cached_path):
             return os.path.isdir(cached_path)
         dirpath = os.path.dirname(cached_path)
@@ -459,6 +502,9 @@ class CacheManager(object):
 
     @method_logger
     def exists(self, rel_path):
+        memstat = self.memcache.get_attributes(rel_path)
+        if memstat.stat:
+            return True
         cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
             return True
