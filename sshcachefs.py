@@ -56,6 +56,12 @@ os.symlink(LOG_FILENAME, "LOG")
 def DEBUG(msg):
     logging.debug(msg)
 
+def INFO(msg):
+    logging.info(msg)
+
+def ERROR(msg):
+    logging.error(msg)
+
 depth = 0
 def method_logger(f):
     def wrapper(*args, **kw):
@@ -64,28 +70,24 @@ def method_logger(f):
             class_name = args[0].__class__.__name__
             func_name = f.func_name
             depth += 1
-            logging.debug("%s:%s {-%s- %s.%s(args: %s, kw: %s)" %
+            logging.debug("%s:%s {%s- %s.%s(args: %s, kw: %s)" %
                           (f.func_code.co_filename,
                            f.func_code.co_firstlineno,
                            depth,
                            class_name, func_name,
                            args[1:], kw))
             retval = f(*args, **kw)
-            logging.debug("%s:%s -%s-} %s.%s(...) -> returns: %s(%r)" %
+            logging.debug("%s:%s -%s} %s.%s(...) -> returns: %s(%r)" %
                           (f.func_code.co_filename,
                            f.func_code.co_firstlineno,
                            depth,
                            class_name, func_name, type(retval), retval))
             depth -= 1
-
             return retval
         except Exception, inst:
-            logging.error("function: %s, exception: %r" % (f.func_name, inst))
-            #exc_type, exc_value, exc_traceback = sys.exc_info()
-            #exc_traceback = traceback.format_exc(exc_type, exc_value, exc_traceback,
-                                                 #limit=2, file=sys.stdout)
+            ERROR("function: %s, exception: %r" % (f.func_name, inst))
             exc_traceback = traceback.format_exc()
-            logging.error("Exception traceback: %s" % exc_traceback)
+            ERROR("Exception traceback: %s" % exc_traceback)
             raise inst
     return wrapper
 
@@ -120,7 +122,7 @@ class SshfsManager(object):
 
     @method_logger
     def run(self):
-        logging.info("Starting SshfsManager")
+        INFO("Starting SshfsManager")
         self._create_dirs()
         cfg = self.cfg
         user_host = "@".join([cfg.user, cfg.server])
@@ -131,21 +133,21 @@ class SshfsManager(object):
         self._ssh_process_handle = subprocess.Popen(args)
         self._wait_for_mount()
         self._is_serving = True
-        logging.info("Sshfs is now mounted on: [%s], remote_dir: [%s]" %
+        INFO("Sshfs is now mounted on: [%s], remote_dir: [%s]" %
                      (cfg.sshfs_mountpoint, cfg.remote_dir))
 
     @method_logger
     def stop(self):
-        logging.info("Stopping SshfsManager")
+        INFO("Stopping SshfsManager")
         if not self._ssh_process_handle:
             return
         mountpoint = self.cfg.sshfs_mountpoint
         if (os.path.ismount(mountpoint)):
-            logging.info("Calling: fusermount -u %s" % mountpoint)
+            INFO("Calling: fusermount -u %s" % mountpoint)
             subprocess.call([self.cfg.fusermount_bin, '-u', mountpoint])
         else:
             pid = self._ssh_process_handle.pid
-            logging.info("Killing SshfsManager process: %s" % pid)
+            INFO("Killing SshfsManager process: %s" % pid)
             os.kill(pid, signal.SIGINT)
         self._is_serving = False
         self._ssh_process_handle = None
@@ -157,7 +159,7 @@ class SshfsManager(object):
         assert(self.cfg)
         assert(self._ssh_process_handle)
 
-        logging.info("Waiting for mount: %s sec" % self.cfg.wait_for_mount)
+        INFO("Waiting for mount: %s sec" % self.cfg.wait_for_mount)
 
         mountpoint = self.cfg.sshfs_mountpoint
 
@@ -176,7 +178,7 @@ class SshfsManager(object):
         if not mounted:
             raise CriticalError("Filesystem not mounted after %d secs" % wait_for_mount)
 
-        logging.info("Filesystem mounted after %s seconds" % time_elapsed)
+        INFO("Filesystem mounted after %s seconds" % time_elapsed)
 
     def _create_dirs(self):
         self._prepare_mountpoint_dir()
@@ -728,12 +730,12 @@ class SshCacheFs(fuse.Fuse):
 
     @method_logger
     def fsinit(self):
-        logging.info("Initializing file system")
+        INFO("Initializing file system")
 
     @method_logger
     def fsdestroy(self):
         self.stop()
-        logging.info("Unmounting file system")
+        INFO("Unmounting file system")
 
     @method_logger
     def statfs(self):
@@ -923,5 +925,5 @@ def main():
 
 if __name__ == '__main__':
     main()
-    logging.info("File system unmounted")
+    INFO("File system unmounted")
 
