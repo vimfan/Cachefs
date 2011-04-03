@@ -65,7 +65,7 @@ def INFO(msg):
 def ERROR(msg):
     logging.error(msg)
 
-ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
+#ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
 
 depth = 0
 def method_logger(f):
@@ -489,9 +489,9 @@ class CacheManager(object):
     @method_logger
     def is_dir(self, rel_path):
         memstat = self.memcache.get_attributes(rel_path)
-        cached_path = self._cache_path(rel_path)
-        if memstat.stat:
+        if memstat and memstat.stat:
             return stat.S_ISDIR(memstat.stat.st_mode)
+        cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
             return os.path.isdir(cached_path)
         dirpath = os.path.dirname(cached_path)
@@ -503,7 +503,7 @@ class CacheManager(object):
     @method_logger
     def exists(self, rel_path):
         memstat = self.memcache.get_attributes(rel_path)
-        if memstat.stat:
+        if memstat and memstat.stat:
             return True
         cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
