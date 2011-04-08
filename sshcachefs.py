@@ -489,8 +489,11 @@ class CacheManager(object):
     @method_logger
     def is_dir(self, rel_path):
         memstat = self.memcache.get_attributes(rel_path)
-        if memstat and memstat.stat:
-            return stat.S_ISDIR(memstat.stat.st_mode)
+        if memstat:
+            if memstat.stat:
+                return stat.S_ISDIR(memstat.stat.st_mode)
+            if not memstat.stat:
+                return False
         cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
             return os.path.isdir(cached_path)
@@ -503,8 +506,8 @@ class CacheManager(object):
     @method_logger
     def exists(self, rel_path):
         memstat = self.memcache.get_attributes(rel_path)
-        if memstat and memstat.stat:
-            return True
+        if memstat:
+            return memstat.stat <> None
         cached_path = self._cache_path(rel_path)
         if os.path.lexists(cached_path):
             return True

@@ -611,6 +611,7 @@ class Getattr(CacheManagerModuleTest):
     def test(self):
         self.sut.get_attributes('.')
 
+'''
 class SshfsManagerModuleTest(ModuleTestCase):
 
     def setUpImpl(self):
@@ -730,3 +731,4 @@ class IsServingMountAfter1Sec(SshfsManagerModuleTest):
         self.sut.stop()
         self.assertFalse(self.sut.is_serving())
 
+'''

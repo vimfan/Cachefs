@@ -16,11 +16,20 @@ class SshCacheFsRunner(object):
     def run(self):
         assert(self.cfg.cache_fs.cache_fs_mountpoint)
         assert(self.cfg_module)
+
+        self._process_handle = subprocess.Popen(['coverage',
+                                                 'run',
+                                                 'sshcachefs.py',
+                                                 self.cfg.cache_fs.cache_fs_mountpoint,
+                                                 self.cfg_module.__name__, 
+                                                 '-f'])
+        '''
         self._process_handle = subprocess.Popen(['python',
                                                  'sshcachefs.py',
                                                  self.cfg.cache_fs.cache_fs_mountpoint,
                                                  self.cfg_module.__name__, 
                                                  '-f'])
+                                                 '''
         self._wait_for_mount()
 
     def stop(self):
