@@ -117,98 +117,6 @@ class Dir(FsObject):
 class File(FsObject):
     pass
 
-class SshfsManager(object):
-
-    def __init__(self, cfg):
-        assert(isinstance(cfg, config_canonical.Config.SshfsManagerConfig))
-        self.cfg = cfg
-        self._ssh_process_handle = None
-        self._is_serving = False
-
-    @method_logger
-    def run(self):
-        INFO("Starting SshfsManager")
-        self._create_dirs()
-        cfg = self.cfg
-        user_host = "@".join([cfg.user, cfg.server])
-        user_host_dir = ":".join([user_host, cfg.remote_dir])
-        args = [cfg.sshfs_bin, user_host_dir, cfg.sshfs_mountpoint]
-        if cfg.sshfs_options:
-            args.extend(cfg.sshfs_options)
-        self._ssh_process_handle = subprocess.Popen(args)
-        self._wait_for_mount()
-        self._is_serving = True
-        INFO("Sshfs is now mounted on: [%s], remote_dir: [%s]" %
-                     (cfg.sshfs_mountpoint, cfg.remote_dir))
-
-    @method_logger
-    def stop(self):
-        INFO("Stopping SshfsManager")
-        if not self._ssh_process_handle:
-            return
-        mountpoint = self.cfg.sshfs_mountpoint
-        if (os.path.ismount(mountpoint)):
-            INFO("Calling: fusermount -u %s" % mountpoint)
-            subprocess.call([self.cfg.fusermount_bin, '-u', mountpoint])
-        else:
-            pid = self._ssh_process_handle.pid
-            INFO("Killing SshfsManager process: %s" % pid)
-            os.kill(pid, signal.SIGINT)
-        self._is_serving = False
-        self._ssh_process_handle = None
-
-    def is_serving(self):
-        return self._is_serving
-
-    def _wait_for_mount(self):
-        assert(self.cfg)
-        assert(self._ssh_process_handle)
-
-        INFO("Waiting for mount: %s sec" % self.cfg.wait_for_mount)
-
-        mountpoint = self.cfg.sshfs_mountpoint
-
-        def is_mount():
-            return os.path.ismount(mountpoint)
-
-        interval = 0.2
-        wait_for_mount = self.cfg.wait_for_mount
-        time_start = time.time()
-        time_elapsed = 0
-        mounted = is_mount()
-        while ((not mounted) and time_elapsed < wait_for_mount):
-            time.sleep(interval)
-            mounted = is_mount()
-            time_elapsed = time.time() - time_start
-        if not mounted:
-            raise CriticalError("Filesystem not mounted after %d secs" % wait_for_mount)
-
-        INFO("Filesystem mounted after %s seconds" % time_elapsed)
-
-    def _create_dirs(self):
-        self._prepare_mountpoint_dir()
-
-    def _prepare_mountpoint_dir(self):
-        mountpoint = self.cfg.sshfs_mountpoint
-        assert(mountpoint and isinstance(mountpoint, str))
-
-        if os.path.ismount(mountpoint):
-            raise CriticalError("Cannot unmount filesystem: %s" 
-                                % mountpoint)
-
-        if os.path.isdir(mountpoint) and os.listdir(mountpoint):
-            raise CriticalError(
-                "Cannot mount Sshfs in %s, because directory is not empty" 
-                % mountpoint)
-
-        if not os.path.isdir(mountpoint):
-            try:
-                os.makedirs(mountpoint, 0700)
-                return
-            except:
-                raise CriticalError("Cannot create directory %s" % mountpoint)
-        # else directory is already created and seems to be ready to mounting
-
 class MemoryCache(object):
 
     class GetattrEntry:
@@ -333,11 +241,9 @@ class CacheManager(object):
                           self._links)
 
        
-    def __init__(self, cfg, sshfs_access):
+    def __init__(self, cfg):
         assert(isinstance(cfg, config_canonical.Config.CacheManagerConfig))
-        assert(isinstance(sshfs_access, SshCacheFs.SshfsAccess))
         self.cfg = cfg
-        self.sshfs_access = sshfs_access
         self.path_transformer = CacheManager.PathTransformer()
         self.memcache = MemoryCache()
 
@@ -553,7 +459,7 @@ class CacheManager(object):
         return CacheManager.CachedDirWalker(path)
 
     def _create_local_copy(self, rel_filepath):
-        src = os.sep.join([self.sshfs_access.mountpoint(), rel_filepath])
+        src = os.sep.join([self.cfg.source_dir, rel_filepath])
         dst = self._cache_path(rel_filepath)
         stamp = self.path_transformer.transform_filepath(dst)
         parent_dir = os.path.dirname(dst)
@@ -579,7 +485,7 @@ class CacheManager(object):
         return "".join([root, rel_filepath])
 
     def _absolute_remote_path(self, rel_path):
-        path = "".join([self.sshfs_access.mountpoint(), rel_path])
+        path = "".join([self.cfg.source_dir, rel_path])
         return path
 
     def _prepare_directories(self):
@@ -746,35 +652,20 @@ class Stat(fuse.Stat):
 
 class SshCacheFs(fuse.Fuse):
 
-    class SshfsAccess(object):
-
-        def __init__(self, sshfs_manager):
-            self._sshfs_mgr = sshfs_manager
-
-        def mountpoint(self):
-            return self._sshfs_mgr.cfg.sshfs_mountpoint
-
-        def is_serving(self):
-            return self._sshfs_mgr.is_serving()
-
     def __init__(self, cfg, *args, **kw):
         #super(SshCacheFs, self).__init__(*args, **kwargs)
         fuse.Fuse.__init__(self, *args, **kw)
         self.cfg = cfg
-        self.sshfs_mgr = SshfsManager(self.cfg.ssh)
-        self.cache_mgr = CacheManager(self.cfg.cache_manager, 
-                                           SshCacheFs.SshfsAccess(self.sshfs_mgr))
+        self.cache_mgr = CacheManager(self.cfg.cache_manager)
         self.root = Dir('/', None)
 
     @method_logger
     def run(self):
-        self.sshfs_mgr.run()
         self.cache_mgr.run()
         self.main()
 
     @method_logger
     def stop(self):
-        self.sshfs_mgr.stop()
         self.cache_mgr.stop()
 
     @method_logger

@@ -19,13 +19,13 @@ class SshCacheFsRunner(object):
 
         self._process_handle = subprocess.Popen(['coverage',
                                                  'run',
-                                                 'sshcachefs.py',
+                                                 'cachefs.py',
                                                  self.cfg.cache_fs.cache_fs_mountpoint,
                                                  self.cfg_module.__name__, 
                                                  '-f'])
         '''
         self._process_handle = subprocess.Popen(['python',
-                                                 'sshcachefs.py',
+                                                 'cachefs.py',
                                                  self.cfg.cache_fs.cache_fs_mountpoint,
                                                  self.cfg_module.__name__, 
                                                  '-f'])
@@ -37,7 +37,7 @@ class SshCacheFsRunner(object):
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         if (os.path.ismount(mountpoint)):
             logging.info("Calling: fusermount -u %s" % mountpoint)
-            subprocess.call([self.cfg.ssh.fusermount_bin, '-u', mountpoint])
+            subprocess.call([self.cfg.cache_fs.fusermount_bin, '-u', mountpoint])
         else:
             pid = self._process_handle.pid
             logging.info("Killing SshCacheFs")
