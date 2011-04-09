@@ -148,7 +148,7 @@ class MemoryCache(object):
         DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
         if self._readlink.has_key(path):
             entry = self._readlink[path]
-            if entry.timestamp - time.time() > 60:
+            if entry.timestamp - time.time() > 60: # TODO: parametrize this
                 return None
             return entry
         return None
@@ -177,9 +177,9 @@ class CacheManager(object):
                     elif stat.S_ISLNK(st_mode):
                         links.append(entry)
                     else:
-                        DEBUG("unsupported type of file %s" % full_path)
+                        ERROR("unsupported type of file %s" % full_path)
                 except OSError:
-                    DEBUG("cannot stat: %s" % full_path)
+                    ERROR("cannot stat: %s" % full_path)
 
             return dirs, files, links
 
@@ -327,8 +327,8 @@ class CacheManager(object):
                     return None
             else:
                 try:
-                    path_to_remote = self._absolute_remote_path(relative_path)
-                    st = os.lstat(path_to_remote)
+                    path_to_source = self._absolute_source_path(relative_path)
+                    st = os.lstat(path_to_source)
                     assert(stat.S_ISDIR(st.st_mode))
                     self._cache_directory(relative_path)
                 except OSError, ex:
@@ -337,8 +337,8 @@ class CacheManager(object):
 
     @method_logger
     def _cache_directory(self, rel_path):
-        remote_path = self._absolute_remote_path(rel_path)
-        assert(os.path.isdir(remote_path))
+        source_path = self._absolute_source_path(rel_path)
+        assert(os.path.isdir(source_path))
 
         path_to_cache = self._cache_path(rel_path)
         try:
@@ -347,17 +347,17 @@ class CacheManager(object):
             DEBUG("most likely directory %s already exists" % path_to_cache)
 
         cache_walker = self._create_cached_dir_walker(path_to_cache)
-        remote_dir_walker = self._create_dir_walker(remote_path)
-        DEBUG("REMOTE PATH: %s" % remote_path)
+        source_dir_walker = self._create_dir_walker(source_path)
+        DEBUG("REMOTE PATH: %s" % source_path)
 
-        not_cached_files = list(set(remote_dir_walker.files) - set(cache_walker.files))
-        DEBUG("NOT CACHED FILES %s" % not_cached_files)
+        not_cached_files = list(set(source_dir_walker.files) - set(cache_walker.files))
+        DEBUG("File to be cached: %s" % not_cached_files)
 
-        not_cached_dirs = list(set(remote_dir_walker.dirs) - set(cache_walker.dirs))
-        DEBUG("NOT CACHED DIRS %s" % not_cached_dirs)
+        not_cached_dirs = list(set(source_dir_walker.dirs) - set(cache_walker.dirs))
+        DEBUG("Directories to be cached: %s" % not_cached_dirs)
 
-        not_cached_links = list(set(remote_dir_walker.links) - set(cache_walker.links))
-        DEBUG("NOT CACHED LINKS %s" % not_cached_links)
+        not_cached_links = list(set(source_dir_walker.links) - set(cache_walker.links))
+        DEBUG("Links to be cached: %s" % not_cached_links)
 
         for filename in not_cached_files:
             transformed_filepath = self.path_transformer.transform_filepath(filename)
@@ -368,7 +368,7 @@ class CacheManager(object):
             os.mkdir(os.sep.join([path_to_cache,transformed_dirpath]))
 
         for link in not_cached_links:
-            link_target = os.readlink(os.sep.join([remote_path, link]))
+            link_target = os.readlink(os.sep.join([source_path, link]))
             os.symlink(link_target, os.sep.join([path_to_cache, link]))
 
         dir_cache_stamp = self.path_transformer.transform_dirpath(path_to_cache)
@@ -389,7 +389,7 @@ class CacheManager(object):
                 os.symlink('#', stamp)
             return
         else:
-            DEBUG("Don't know how to create cache stamp for '%s'" % path_to_cache)
+            ERROR("Don't know how to create cache stamp for '%s'" % path_to_cache)
             return
                
     @method_logger
@@ -407,7 +407,7 @@ class CacheManager(object):
         if self._has_init_stamp(dirpath):
             transformed_path = self.path_transformer.transform_dirpath(cached_path)
             return (os.path.exists(cached_path) or os.path.exists(transformed_path))
-        return os.path.isdir(self._absolute_remote_path(rel_path))
+        return os.path.isdir(self._absolute_source_path(rel_path))
 
     @method_logger
     def exists(self, rel_path):
@@ -421,8 +421,8 @@ class CacheManager(object):
         if self._has_init_stamp(dirpath):
             filepath_transformed = self.path_transformer.transform_filepath(cached_path)
             return os.path.lexists(filepath_transformed)
-        remote_path = self._absolute_remote_path(rel_path)
-        return os.path.lexists(remote_path)
+        source_path = self._absolute_source_path(rel_path)
+        return os.path.lexists(source_path)
 
     @method_logger
     def _create_dir_init_stamp(self, rel_dirpath):
@@ -484,7 +484,7 @@ class CacheManager(object):
         root = self._cache_root_dir()
         return "".join([root, rel_filepath])
 
-    def _absolute_remote_path(self, rel_path):
+    def _absolute_source_path(self, rel_path):
         path = "".join([self.cfg.source_dir, rel_path])
         return path
 
@@ -494,10 +494,6 @@ class CacheManager(object):
             os.makedirs(dir)
 
     def _cache_root_dir(self):
-        #nowstr = str(datetime.datetime.now()).replace(' ', '_')
-        #pidstr = str(os.getpid())
-        #cache_root = [self._config.cache_dir, pidstr, nowstr, self._config.remote_dir]
-        #return "".join(cache_root)
         return self.cfg.cache_root_dir
 
 class Stat(fuse.Stat):
@@ -650,10 +646,10 @@ class Stat(fuse.Stat):
         self.st_ctime = self.datetime_epoch(value)
     dt_ctime = property(_get_dt_ctime, _set_dt_ctime)
 
-class SshCacheFs(fuse.Fuse):
+class CacheFs(fuse.Fuse):
 
     def __init__(self, cfg, *args, **kw):
-        #super(SshCacheFs, self).__init__(*args, **kwargs)
+        #super(CacheFs, self).__init__(*args, **kwargs)
         fuse.Fuse.__init__(self, *args, **kw)
         self.cfg = cfg
         self.cache_mgr = CacheManager(self.cfg.cache_manager)
@@ -848,9 +844,9 @@ class SshCacheFs(fuse.Fuse):
 
 def main():
     usage = """
-    SshCacheFs: Sshfs read-only cache virtual filesystem.
+    CacheFs: Sshfs read-only cache virtual filesystem.
     """ + fuse.Fuse.fusage
-    server = SshCacheFs(config.getConfig(),
+    server = CacheFs(config.getConfig(),
                         version="%prog " + fuse.__version__,
                         usage=usage,
                         dash_s_do='setsingle')

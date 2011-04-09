@@ -25,6 +25,7 @@ def logger_tm(f):
         logging.debug("END OF TESTCASE ---------- %s.%s ---------------" % (class_name, func_name))
         return retval
     wrapper.func_name = f.func_name
+    wrapper.__doc__ = f.__doc__
     return wrapper
 
 class TestHelper:
@@ -169,10 +170,10 @@ class ModuleTestCase(unittest.TestCase):
         cfg = TestHelper.get_cfg_for_test()
         os.remove(cfg.ut_current_tc)
 
-class SshCacheFsUnitTest(unittest.TestCase):
+class CacheFsUnitTest(unittest.TestCase):
 
     def setUp(self):
-        self.sut = cachefs.SshCacheFs(TestHelper.get_cfg_for_test())
+        self.sut = cachefs.CacheFs(TestHelper.get_cfg_for_test())
 
     def tearDown(self):
         pass
@@ -304,7 +305,7 @@ class CacheFsModuleTest(ModuleTestCase):
             os.makedirs(mountpoint)
         TestHelper.create_source_dir(cfg.cache_manager)
         self.precondition()
-        self.runner = runner.SshCacheFsRunner(test_config)
+        self.runner = runner.CacheFsRunner(test_config)
         self.runner.run()
 
     def tearDownImpl(self):
@@ -330,7 +331,7 @@ class TestDirectoriesOnly(CacheFsModuleTest):
 
     @logger_tm
     def test(self):
-        '''Directories'''
+        '''Module test: Check directories'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
         self.assertTrue(TestDirectoriesOnly.SUBDIR_1 in dirs)
@@ -373,7 +374,7 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
 
     @logger_tm
     def test(self):
-        '''Directories and files'''
+        '''Module test: Check directories and files'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
 
@@ -429,8 +430,9 @@ class RelativePaths(CacheFsModuleTest):
         TestHelper.create_source_dir(cfg, cls.SUBDIR_3)
         TestHelper.create_source_file(cfg, cls.FILE_3, cls.FILE_CONTENT_3)
 
+    @logger_tm
     def test(self):
-        '''Relative paths'''
+        '''Module test: Relative paths'''
 
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         cls = RelativePaths
@@ -463,8 +465,9 @@ class SymbolicLinks(CacheFsModuleTest):
 
             ln -s ../../../i/f/g e/f/g/j''')
 
+    @logger_tm
     def test(self):
-        '''Symbolic links'''
+        '''Module test: Symbolic links'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
 
         full_path = os.sep.join([mountpoint, 'a/b/c'])
@@ -516,16 +519,6 @@ class CreateCacheDir(CacheManagerModuleTest):
     def test_create_cache_dir(self):
         self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
 
-class DirInitStamp(CacheManagerModuleTest):
-
-    @logger_tm
-    def test_has_init_stamp(self):
-
-        # UT
-        self.assertFalse(self.sut._has_init_stamp('/'))
-        self.sut.get_attributes('/')
-        self.assertTrue(self.sut._has_init_stamp('/'))
-
 class Exists(CacheManagerModuleTest):
 
     @logger_tm
@@ -543,18 +536,6 @@ class ExistsRoot(CacheManagerModuleTest):
         file_path = '/'
         self.assertTrue(self.sut.exists(file_path))
 
-class IsFile(CacheManagerModuleTest):
-
-    @logger_tm
-    def test_is_file(self):
-        file_path = '/TestCacheManager.test_is_file.txt'
-        TestHelper.create_source_file(self.cfg.cache_manager,
-                                      file_path,
-                                      ':' * 10)
-        self.assertTrue(self.sut.exists(file_path))
-        #self.assertTrue(self.sut.is_file(file_path))
-        self.assertFalse(self.sut.is_dir(file_path))
-
 class IsDir(CacheManagerModuleTest):
 
     @logger_tm
@@ -563,50 +544,6 @@ class IsDir(CacheManagerModuleTest):
         TestHelper.create_source_dir(self.cfg.cache_manager, dir_path)
         self.assertTrue(self.sut.exists(dir_path))
         self.assertTrue(self.sut.is_dir(dir_path))
-        #self.assertFalse(self.sut.is_file(dir_path))
-
-class GetPathToFile(CacheManagerModuleTest):
-
-    @logger_tm
-    def test_get_path_to_file(self):
-        file_path = '/TestCacheManager.test_get_path_to_file.txt'
-        file_content = '?' * 7
-        TestHelper.create_source_file(self.cfg.cache_manager,
-                                      file_path,
-                                      file_content)
-        #cached_filepath = self.sut.get_path_to_file(file_path)
-        # FIXME: maybe this test will be not needed
-        #self.assertEqual(self.sut.cfg.cache_root_dir, os.path.dirname(cached_filepath))
-        #self.assertTrue(os.path.exists(cached_filepath))
-        #self.assertEqual(file_content, open(cached_filepath).read())
-
-class GetPathToFileTwice(CacheManagerModuleTest):
-    @logger_tm
-    def test_get_path_to_file_twice_on_differrent_files(self):
-
-        cfg = self.cfg.cache_manager
-
-        dir_path = '/TestCacheManager.test_get_path_to_file_twice_on_differrent_files'
-        TestHelper.create_source_dir(cfg, dir_path)
-        dir_path = os.sep.join([dir_path, 'subdir'])
-        TestHelper.create_source_dir(cfg, dir_path)
-
-        file_path = os.sep.join([dir_path, '1.txt'])
-        file_content = '#' * 8
-        TestHelper.create_source_file(cfg, file_path, file_content)
-
-        file_path2 = os.sep.join([dir_path, '2.txt'])
-        file_content2 = '/' * 8
-        TestHelper.create_source_file(cfg, file_path2, file_content2)
-
-        #cached_filepath = self.sut.get_path_to_file(file_path)
-        # FIXME: maybe remove (as above)
-        #self.assertTrue(os.path.exists(cached_filepath))
-        #self.assertEqual(file_content, open(cached_filepath).read())
-
-       #cached_filepath2 = self.sut.get_path_to_file(file_path2)
-        #self.assertTrue(os.path.exists(cached_filepath2))
-        #self.assertEqual(file_content2, open(cached_filepath2).read())
 
 class ListDir(CacheManagerModuleTest):
     @logger_tm
@@ -652,124 +589,3 @@ class Getattr(CacheManagerModuleTest):
     def test(self):
         self.sut.get_attributes('.')
 
-'''
-class SshfsManagerModuleTest(ModuleTestCase):
-
-    def setUpImpl(self):
-        self.sut = cachefs.SshfsManager(TestHelper.get_cfg_for_test().ssh)
-        self._umount_all()
-        self._create_remote_dir()
-
-    def tearDownImpl(self):
-        self._remove_remote_dir()
-        self._umount_all()
-        #shutil.rmtree(TestHelper.get_cfg_for_test().ut_cleanup_dir)
-
-    def _umount_all(self):
-        self.sut.stop()
-
-    def _create_remote_dir(self):
-        TestHelper.create_remote_dir(self.sut.cfg)
-
-    def _remove_remote_dir(self):
-        pass
-
-    def _local_path_of_file_in_sshfs(self, rel_filepath):
-        return os.sep.join([self.sut.cfg.sshfs_mountpoint, rel_filepath])
-
-    def _remove_remote_file(self, rel_filepath):
-        self.assertTrue(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
-        os.remove(self._local_path_of_file_in_sshfs(rel_filepath))
-
-    def _create_remote_file(self, rel_filepath, length):
-        TestHelper.create_remote_file(self.sut.cfg, rel_filepath, '*' * length)
-
-    def _read_remote_file(self, rel_filepath):
-        self.assertTrue(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
-        f = open(self._local_path_of_file_in_sshfs(rel_filepath))
-        buffer = f.read()
-        f.close()
-        return buffer
-
-
-class RunStop(SshfsManagerModuleTest):
-
-    def test_run_stop(self):
-        self.sut.run()
-        length = 1024;
-        filename = 'test_run_stop___file'
-        self._create_remote_file(filename, length)
-        remote_file_content = self._read_remote_file(filename)
-
-        self.assertEqual(length, len(remote_file_content))
-        self._remove_remote_file(filename)
-
-        # second attempt to remove the same file shall fail
-        self.assertRaises(OSError, self._remove_remote_file, filename)
-        self.assertRaises(IOError, self._read_remote_file, filename)
-
-        self.sut.stop()
-
-        self.assertFalse(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
-
-class StopWait2SecMountAfter1(SshfsManagerModuleTest):
-
-    def test_stop_wait2sec_mountAfter1(self):
-        self.sut.cfg.sshfs_bin = './bin_fakes/sshfs_fake.sh'
-        self.sut.cfg.wait_for_mount = 2
-        self.sut.cfg.sshfs_options.append('1') # interpreted by fake
-        self.sut.run()
-
-        length = 1024 * 200 # 200kb
-        filename = 'test_run_stop___file'
-        self._create_remote_file(filename, length)
-
-        self.sut.stop()
-
-        self.assertFalse(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
-
-class StopWait1SecMountAfter2(SshfsManagerModuleTest):
-
-    def test_stop_wait1sec_mountAfter2(self):
-        self.sut.cfg.sshfs_bin = './bin_fakes/sshfs_fake.sh'
-        self.sut.cfg.wait_for_mount = 1
-        self.sut.cfg.sshfs_options.append('2') # interpreted by fake
-
-        self.assertRaises(cachefs.CriticalError, self.sut.run)
-        self.sut.stop()
-
-        self.assertFalse(os.path.ismount(self.sut.cfg.sshfs_mountpoint))
-
-class MountpointDir(SshfsManagerModuleTest):
-
-    def test_mountpoint_dir(self):
-        mountpoint = self.sut.cfg.sshfs_mountpoint
-        if os.path.exists(mountpoint):
-            if os.path.isdir(mountpoint):
-                shutil.rmtree(mountpoint, True)
-
-        self.sut._create_dirs()
-
-        self.assertTrue(os.path.exists(mountpoint))
-        self.assertTrue(os.path.isdir(mountpoint))
-
-class IsServing(SshfsManagerModuleTest):
-    def test_is_serving(self):
-        self.sut.run()
-        self.assertTrue(self.sut.is_serving())
-        self.sut.stop()
-        self.assertFalse(self.sut.is_serving())
-
-class IsServingMountAfter1Sec(SshfsManagerModuleTest):
-
-    def test_is_serving_mountAfter1sec(self):
-        self.sut.cfg.sshfs_bin = './bin_fakes/sshfs_fake.sh'
-        self.sut.cfg.wait_for_mount = 5
-        self.sut.cfg.sshfs_options.append('1')
-
-        self.sut.run()
-        self.assertTrue(self.sut.is_serving())
-        self.sut.stop()
-        self.assertFalse(self.sut.is_serving())
-
-'''

@@ -6,7 +6,7 @@ import os
 import time
 import logging
 
-class SshCacheFsRunner(object):
+class CacheFsRunner(object):
 
     def __init__(self, cfg_module):
         self.cfg_module = cfg_module
@@ -33,14 +33,14 @@ class SshCacheFsRunner(object):
         self._wait_for_mount()
 
     def stop(self):
-        logging.info("Stopping SshCacheFs")
+        logging.info("Stopping CacheFs")
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         if (os.path.ismount(mountpoint)):
             logging.info("Calling: fusermount -u %s" % mountpoint)
             subprocess.call([self.cfg.cache_fs.fusermount_bin, '-u', mountpoint])
         else:
             pid = self._process_handle.pid
-            logging.info("Killing SshCacheFs")
+            logging.info("Killing CacheFs")
             os.kill(pid, signal.SIGINT)
 
     def _wait_for_mount(self):
@@ -71,7 +71,7 @@ class SshCacheFsRunner(object):
 def main():
     assert(len(sys.argv) == 2)
     exec('import %s as config' % sys.argv[1])
-    runner = SshCacheFsRunner(config)
+    runner = CacheFsRunner(config)
     runner.run()
 
 if __name__ == '__main__':
