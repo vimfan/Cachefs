@@ -653,7 +653,6 @@ class CacheFs(fuse.Fuse):
         fuse.Fuse.__init__(self, *args, **kw)
         self.cfg = cfg
         self.cache_mgr = CacheManager(self.cfg.cache_manager)
-        self.root = Dir('/', None)
 
     @method_logger
     def run(self):
@@ -709,6 +708,39 @@ class CacheFs(fuse.Fuse):
         return -errno.ENOENT
 
     @method_logger
+    def opendir(self, path):
+        if not self.cache_mgr.exists(path):
+            return -errno.ENOENT
+        if not self.cache_mgr.is_dir(path):
+            return -errno.ENOENT
+        return None # means success
+
+    @method_logger
+    def readdir(self, path, offset = None, dh = None):
+        """
+        Generator function. Produces a directory listing.
+        Yields individual fuse.Direntry objects, one per file in the
+        directory. Should always yield at least "." and "..".
+        Should yield nothing if the file is not a directory or does not exist.
+        (Does not need to raise an error).
+
+        offset: I don't know what this does, but I think it allows the OS to
+        request starting the listing partway through (which I clearly don't
+        yet support). Seems to always be 0 anyway.
+        """
+        # Update timestamps: readdir updates atime
+        if not self.cache_mgr.exists(path):
+            yield 
+        elif not self.cache_mgr.is_dir(path):
+            yield
+
+        yield fuse.Direntry(".")
+        yield fuse.Direntry("..")
+        for entry in self.cache_mgr.list_dir(path):
+            yield fuse.Direntry(entry)
+
+
+    @method_logger
     def mknod(self, path, mode, rdev):
         return -errno.ENOENT
 
@@ -758,15 +790,6 @@ class CacheFs(fuse.Fuse):
     # working on directories. They should all be prepared to accept an
     # optional dir-handle argument, which is whatever object "opendir"
     # returned.
-
-    @method_logger
-    def opendir(self, path):
-        if not self.cache_mgr.exists(path):
-            return -errno.ENOENT
-        if not self.cache_mgr.is_dir(path):
-            return -errno.ENOENT
-        return None # means success
-
     @method_logger
     def releasedir(self, path, dh = None):
         pass
@@ -774,30 +797,6 @@ class CacheFs(fuse.Fuse):
     @method_logger
     def fsyncdir(self, path, datasync, dh):
         pass
-
-    @method_logger
-    def readdir(self, path, offset = None, dh = None):
-        """
-        Generator function. Produces a directory listing.
-        Yields individual fuse.Direntry objects, one per file in the
-        directory. Should always yield at least "." and "..".
-        Should yield nothing if the file is not a directory or does not exist.
-        (Does not need to raise an error).
-
-        offset: I don't know what this does, but I think it allows the OS to
-        request starting the listing partway through (which I clearly don't
-        yet support). Seems to always be 0 anyway.
-        """
-        # Update timestamps: readdir updates atime
-        if not self.cache_mgr.exists(path):
-            yield 
-        elif not self.cache_mgr.is_dir(path):
-            yield
-
-        yield fuse.Direntry(".")
-        yield fuse.Direntry("..")
-        for entry in self.cache_mgr.list_dir(path):
-            yield fuse.Direntry(entry)
 
     ### FILE OPERATION METHODS ###
     # Methods in this section are operations for opening files and working on

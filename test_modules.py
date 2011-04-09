@@ -64,6 +64,21 @@ class TestHelper:
         f.close()
 
     @staticmethod
+    def execute_source(cfg, script):
+        cwd = os.getcwd()
+        os.chdir(cfg.cache_manager.source_dir)
+        named_tmp_file = tempfile.NamedTemporaryFile('wx+b')
+        named_tmp_file.write(script)
+        named_tmp_file.flush()
+        TMP_BIN = '/tmp/tmp_bin'
+        shutil.copyfile(named_tmp_file.name, TMP_BIN)
+        os.chmod(TMP_BIN, 0777)
+        fnull = open(os.devnull, 'w')
+        assert(0 == subprocess.call([TMP_BIN], shell = True, stdout = fnull))
+        os.unlink(TMP_BIN)
+        os.chdir(cwd)
+
+    @staticmethod
     def create_remote_dir(cfg, path = ''):
         assert(isinstance(cfg, config.Config.SshfsManagerConfig))
         if path:
@@ -131,21 +146,6 @@ class TestHelper:
         print subprocess.Popen(call_args, shell = False, stdout = subprocess.PIPE).communicate()[0]
         call_args = [cfg.ut_ssh_bin, user_host, "cd %s; rm %s" % (cfg.remote_dir, script_path)]
         assert(0 == subprocess.call(call_args, shell = False, stdout = fnull))
-
-    @staticmethod
-    def execute_source(cfg, script):
-        cwd = os.getcwd()
-        os.chdir(cfg.cache_manager.source_dir)
-        named_tmp_file = tempfile.NamedTemporaryFile('wx+b')
-        named_tmp_file.write(script)
-        named_tmp_file.flush()
-        TMP_BIN = '/tmp/tmp_bin'
-        shutil.copyfile(named_tmp_file.name, TMP_BIN)
-        os.chmod(TMP_BIN, 0777)
-        fnull = open(os.devnull, 'w')
-        assert(0 == subprocess.call([TMP_BIN], shell = True, stdout = fnull))
-        os.unlink(TMP_BIN)
-        os.chdir(cwd)
 
 
 class ModuleTestCase(unittest.TestCase):
