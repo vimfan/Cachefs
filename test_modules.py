@@ -173,7 +173,8 @@ class ModuleTestCase(unittest.TestCase):
 class CacheFsUnitTest(unittest.TestCase):
 
     def setUp(self):
-        self.sut = cachefs.CacheFs(TestHelper.get_cfg_for_test())
+        self.sut = cachefs.CacheFs()
+        self.sut.cfg = TestHelper.get_cfg_for_test()
 
     def tearDown(self):
         pass
@@ -306,7 +307,12 @@ class CacheFsModuleTest(ModuleTestCase):
         TestHelper.create_source_dir(cfg.cache_manager)
         self.precondition()
         self.runner = runner.CacheFsRunner(test_config)
-        self.runner.run()
+        mountpoint = cfg.cache_fs.cache_fs_mountpoint
+        cmdline_options = [
+            '--source-dir=%s' % cfg.cache_manager.source_dir, 
+            '--cache-dir=%s' % cfg.cache_manager.cache_root_dir
+        ]
+        self.runner.run(mountpoint, cmdline_options)
 
     def tearDownImpl(self):
         self.runner.stop()

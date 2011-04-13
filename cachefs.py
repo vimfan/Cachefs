@@ -14,23 +14,6 @@ import os      # for filesystem modes (O_RDONLY, etc)
 import fuse
 import traceback
 
-######################
-# TODO: treat directories in special way: 
-#       if creation time of directory is older than some configurable value (e.g. one hour)
-#       than reread directory from source
-#####################
-
-if __name__ == '__main__':
-    # FIXME
-    # now we invoke it in clumsy way
-    # script.py mountpoint config_module
-    assert(len(sys.argv) >= 3)
-    import_config = sys.argv[2]
-    del sys.argv[2]
-    exec('import %s as config' % import_config)
-else:
-    import config
-
 import config as config_canonical
 
 
@@ -242,7 +225,6 @@ class CacheManager(object):
 
        
     def __init__(self, cfg):
-        assert(isinstance(cfg, config_canonical.Config.CacheManagerConfig))
         self.cfg = cfg
         self.path_transformer = CacheManager.PathTransformer()
         self.memcache = MemoryCache()
@@ -648,20 +630,42 @@ class Stat(fuse.Stat):
 
 class CacheFs(fuse.Fuse):
 
-    def __init__(self, cfg, *args, **kw):
+    def __init__(self, *args, **kw):
         #super(CacheFs, self).__init__(*args, **kwargs)
         fuse.Fuse.__init__(self, *args, **kw)
-        self.cfg = cfg
-        self.cache_mgr = CacheManager(self.cfg.cache_manager)
+        self.cfg = None
+        self.cache_mgr = None #
 
     @method_logger
     def run(self):
+        self.cache_mgr = CacheManager(self.cfg.cache_manager)
         self.cache_mgr.run()
         self.main()
 
     @method_logger
     def stop(self):
         self.cache_mgr.stop()
+
+    @method_logger
+    def parse(self, *args, **kw):
+        super(CacheFs, self).parse(*args, **kw)
+        self.cfg = config_canonical.getConfig()
+
+        options, arguments =  self.cmdline
+        self.cfg.cache_manager.cache_root_dir = options.cache_dir
+        DEBUG("Cache root dir: %s" % self.cfg.cache_manager.cache_root_dir)
+
+        self.cfg.cache_manager.source_dir = options.source_dir
+        DEBUG("Cache source dir: %s" % self.cfg.cache_manager.source_dir)
+
+        self.cfg.cache_manager.long_stamp = options.long_stamp
+        self.cfg.cache_manager.short_stamp = options.short_stamp
+
+        self.cfg.cache_fs.cache_fs_mountpoint = self.fuse_args.mountpoint
+        DEBUG("Mountpoint: %s" % self.cfg.cache_fs.cache_fs_mountpoint)
+
+        validator = config_canonical.get_validator()
+        validator.validate(self.cfg)
 
     @method_logger
     def fsinit(self):
@@ -845,17 +849,42 @@ def main():
     usage = """
     CacheFs: Sshfs read-only cache virtual filesystem.
     """ + fuse.Fuse.fusage
-    server = CacheFs(config.getConfig(),
-                        version="%prog " + fuse.__version__,
-                        usage=usage,
-                        dash_s_do='setsingle')
+    server = CacheFs(version="%prog " + fuse.__version__,
+                     usage=usage,
+                     dash_s_do='setsingle')
 
-    #server.flags = 0
-    server.parse(errex=1)
+    server.parser.add_option('--source-dir', 
+                             dest="source_dir", 
+                             help="Source directory which will be cached.",
+                             metavar="PATH")
+
+    server.parser.add_option('--cache-dir',
+                             dest='cache_dir',
+                             help="Path to directory with cache (will be created if not exists).",
+                             metavar="PATH")
+
+    server.parser.add_option('--long-stamp',
+                             dest="long_stamp", 
+                             help="Long time stamp lifetim in seconds. (default: 600)", 
+                             metavar="INTERVAL", 
+                             type="int",
+                             default=600)
+
+    server.parser.add_option('--short-stamp',
+                             dest="short_stamp", 
+                             help="Short time stamp lifetime in seconds. (default: 60)", 
+                             metavar="INTERVAL",
+                             type="int",
+                             default=60)
+
+    server.flags = 0
     server.multithreaded = 0
     try:
+        server.parse(errex=1)
         server.run()
     except fuse.FuseError, e:
+        print str(e)
+    except CriticalError, e:
         print str(e)
 
 if __name__ == '__main__':

@@ -13,10 +13,10 @@ class CacheFsRunner(object):
         self.cfg = cfg_module.getConfig()
         self._process_handle = None
 
-    def run(self):
+    def run(self, mountpoint, options=[]):
         assert(self.cfg.cache_fs.cache_fs_mountpoint)
         assert(self.cfg_module)
-
+        '''
         self._process_handle = subprocess.Popen(['coverage',
                                                  'run',
                                                  'cachefs.py',
@@ -24,12 +24,10 @@ class CacheFsRunner(object):
                                                  self.cfg_module.__name__, 
                                                  '-f'])
         '''
-        self._process_handle = subprocess.Popen(['python',
-                                                 'cachefs.py',
-                                                 self.cfg.cache_fs.cache_fs_mountpoint,
-                                                 self.cfg_module.__name__, 
-                                                 '-f'])
-                                                 '''
+        cmdline = ['python', 'cachefs.py', mountpoint]
+        cmdline.extend(options) 
+        cmdline.append('-f') # foreground
+        self._process_handle = subprocess.Popen(cmdline)
         self._wait_for_mount()
 
     def stop(self):
