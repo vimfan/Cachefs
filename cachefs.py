@@ -5,79 +5,22 @@ import stat
 import subprocess
 import sys
 import time
-import logging
+
 import datetime
 import calendar
 import errno
 import stat    # for file properties
 import os      # for filesystem modes (O_RDONLY, etc)
 import fuse
-import traceback
+
+from memcache import MemoryCache
+from loclogger import DEBUG, INFO, ERROR, method_logger
 
 import config as config_canonical
-
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
 
-if not os.path.exists("logs"):
-    os.makedirs("logs")
-
-LOG_FILENAME = "logs/LOG%s" % os.getpid()
-#LOG_FILENAME='/dev/null'
-
-if os.path.exists(LOG_FILENAME):
-    os.remove(LOG_FILENAME)
-
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
-
-if os.path.lexists("LOG"):
-    os.unlink("LOG")
-
-os.symlink(LOG_FILENAME, "LOG")
-
-def NO_LOG(msg):
-    pass
-
-def DEBUG(msg):
-    logging.debug(msg)
-
-def INFO(msg):
-    logging.info(msg)
-
-def ERROR(msg):
-    logging.error(msg)
-
-#ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
-
-depth = 0
-def method_logger(f):
-    def wrapper(*args, **kw):
-        global depth
-        try:
-            class_name = args[0].__class__.__name__
-            func_name = f.func_name
-            depth += 1
-            DEBUG("%s:%s {%s- %s.%s(args: %s, kw: %s)" %
-                          (f.func_code.co_filename,
-                           f.func_code.co_firstlineno,
-                           depth,
-                           class_name, func_name,
-                           args[1:], kw))
-            retval = f(*args, **kw)
-            DEBUG("%s:%s -%s} %s.%s(...) -> returns: %s(%r)" %
-                          (f.func_code.co_filename,
-                           f.func_code.co_firstlineno,
-                           depth,
-                           class_name, func_name, type(retval), retval))
-            depth -= 1
-            return retval
-        except Exception, inst:
-            ERROR("function: %s, exception: %r" % (f.func_name, inst))
-            exc_traceback = traceback.format_exc()
-            ERROR("Exception traceback: %s" % exc_traceback)
-            raise inst
-    return wrapper
 
 class CriticalError(Exception):
     pass
@@ -100,47 +43,6 @@ class Dir(FsObject):
 class File(FsObject):
     pass
 
-class MemoryCache(object):
-
-    class GetattrEntry:
-
-        def __init__(self, st, stamp = None):
-            self.stat = st
-            self.timestamp = stamp
-
-    class ReadlinkEntry:
-        
-        def __init__(self, target, stamp = None):
-            self.target = target
-            self.timestamp = stamp
-
-    def __init__(self):
-        self._getattr = {}
-        self._readlink = {}
-
-    def get_attributes(self, path):
-        DEBUG("MEMORY CACHED_FILE ATTRIBUTES: %s" % len(self._getattr))
-        if self._getattr.has_key(path):
-            entry = self._getattr[path]
-            if entry.timestamp - time.time() > 60:
-                return None
-            return entry
-        return None
-
-    def read_link(self, path):
-        DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
-        if self._readlink.has_key(path):
-            entry = self._readlink[path]
-            if entry.timestamp - time.time() > 60: # TODO: parametrize this
-                return None
-            return entry
-        return None
-
-    def cache_attributes(self, path, st = None):
-        self._getattr[path] = MemoryCache.GetattrEntry(st, time.time())
-
-    def cache_link_target(self, path, target):
-        self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
 
 class CacheManager(object):
 
@@ -479,12 +381,7 @@ class CacheManager(object):
         return self.cfg.cache_root_dir
 
 class Stat(fuse.Stat):
-    """
-    A Stat object. Describes the attributes of a file or directory.
-    Has all the st_* attributes, as well as dt_atime, dt_mtime and dt_ctime,
-    which are datetime.datetime versions of st_*time. The st_*time versions
-    are in epoch time.
-    """
+
     # Filesize of directories, in bytes.
     DIRSIZE = 4096
 
@@ -492,23 +389,7 @@ class Stat(fuse.Stat):
     # But it has to have certain fields.
     def __init__(self, st_mode, st_size, st_nlink=1, st_uid=None, st_gid=None,
             dt_atime=None, dt_mtime=None, dt_ctime=None):
-        """
-        Creates a Stat object.
-        st_mode: Required. Should be stat.S_IFREG or stat.S_IFDIR ORed with a
-            regular Unix permission value like 0644.
-        st_size: Required. Size of file in bytes. For a directory, should be
-            Stat.DIRSIZE.
-        st_nlink: Number of hard-links to the file. Regular files should
-            usually be 1 (default). Directories should usually be 2 + number
-            of immediate subdirs (one from the parent, one from self, one from
-            each child).
-        st_uid, st_gid: uid/gid of file owner. Defaults to the user who
-            mounted the file system.
-        st_atime, st_mtime, st_ctime: atime/mtime/ctime of file.
-            (Access time, modification time, stat change time).
-            These must be datetime.datetime objects, in UTC time.
-            All three values default to the current time.
-        """
+
         self.st_mode = st_mode
         self.st_ino = 2         # Ignored, but required
         self.st_dev = 1        # Ignored, but required
@@ -538,11 +419,6 @@ class Stat(fuse.Stat):
 
     @staticmethod
     def datetime_epoch(dt):
-        """
-        Converts a datetime.datetime object which is in UTC time
-        (as returned by datetime.datetime.utcnow()) into an int, which represents
-        the number of seconds since the system epoch (also in UTC time).
-        """
         # datetime.datetime.timetuple converts a datetime into a time.struct_time.
         # calendar.timegm converts a time.struct_time into epoch time, without
         # modifying for time zone (so UTC time stays in UTC time, unlike
@@ -550,17 +426,9 @@ class Stat(fuse.Stat):
         return calendar.timegm(dt.timetuple())
     @staticmethod
     def epoch_datetime(seconds):
-        """
-        Converts an int, the number of seconds since the system epoch in UTC
-        time, into a datetime.datetime object, also in UTC time.
-        """
         return datetime.datetime.utcfromtimestamp(seconds)
 
     def set_times_to_now(self, atime=False, mtime=False, ctime=False):
-        """
-        Sets one or more of atime, mtime and ctime to the current time.
-        atime, mtime, ctime: All booleans. If True, this value is updated.
-        """
         now = datetime.datetime.utcnow()
         if atime:
             self.dt_atime = now
@@ -570,14 +438,6 @@ class Stat(fuse.Stat):
             self.dt_ctime = now
 
     def check_permission(self, uid, gid, flags):
-        """
-        Checks the permission of a uid:gid with given flags.
-        Returns True for allowed, False for denied.
-        flags: As described in man 2 access (Linux Programmer's Manual).
-            Either os.F_OK (test for existence of file), or ORing of
-            os.R_OK, os.W_OK, os.X_OK (test if file is readable, writable and
-            executable, respectively. Must pass all tests).
-        """
         if flags == os.F_OK:
             return True
         user = (self.st_mode & 0700) >> 6
@@ -721,17 +581,6 @@ class CacheFs(fuse.Fuse):
 
     @method_logger
     def readdir(self, path, offset = None, dh = None):
-        """
-        Generator function. Produces a directory listing.
-        Yields individual fuse.Direntry objects, one per file in the
-        directory. Should always yield at least "." and "..".
-        Should yield nothing if the file is not a directory or does not exist.
-        (Does not need to raise an error).
-
-        offset: I don't know what this does, but I think it allows the OS to
-        request starting the listing partway through (which I clearly don't
-        yet support). Seems to always be 0 anyway.
-        """
         # Update timestamps: readdir updates atime
         if not self.cache_mgr.exists(path):
             yield 
@@ -784,16 +633,6 @@ class CacheFs(fuse.Fuse):
     def truncate(self, path, size):
         return 0
 
-    ### DIRECTORY OPERATION METHODS ###
-    # Methods in this section are operations for opening directories and
-    # working on open directories.
-    # "opendir" is the method for opening directories. It *may* return an
-    # arbitrary Python object (not None or int), which is used as a dir
-    # handle by the methods for working on directories.
-    # All the other methods (readdir, fsyncdir, releasedir) are methods for
-    # working on directories. They should all be prepared to accept an
-    # optional dir-handle argument, which is whatever object "opendir"
-    # returned.
     @method_logger
     def releasedir(self, path, dh = None):
         pass
@@ -801,17 +640,6 @@ class CacheFs(fuse.Fuse):
     @method_logger
     def fsyncdir(self, path, datasync, dh):
         pass
-
-    ### FILE OPERATION METHODS ###
-    # Methods in this section are operations for opening files and working on
-    # open files.
-    # "open" and "create" are methods for opening files. They *may* return an
-    # arbitrary Python object (not None or int), which is used as a file
-    # handle by the methods for working on files.
-    # All the other methods (fgetattr, release, read, write, fsync, flush,
-    # ftruncate and lock) are methods for working on files. They should all be
-    # prepared to accept an optional file-handle argument, which is whatever
-    # object "open" or "create" returned.
 
     @method_logger
     def open(self, path, flags):
