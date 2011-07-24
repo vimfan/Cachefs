@@ -31,7 +31,7 @@ def logger_tm(f):
 class TestHelper:
 
     @staticmethod
-    def get_cfg_for_test():
+    def get_config():
         return test_config.getConfig()
 
     @staticmethod
@@ -151,7 +151,7 @@ class TestHelper:
 class ModuleTestCase(unittest.TestCase):
 
     def setUp(self):
-        cfg = TestHelper.get_cfg_for_test()
+        cfg = TestHelper.get_config()
         tests_root = cfg.ut_tests_root
         testcase_current = cfg.ut_current_tc
         tc_wdir = self.__test_dir = os.sep.join([tests_root, self.__class__.__name__])
@@ -167,14 +167,14 @@ class ModuleTestCase(unittest.TestCase):
     def tearDown(self):
         self.tearDownImpl()
         shutil.rmtree(self.__test_dir)
-        cfg = TestHelper.get_cfg_for_test()
+        cfg = TestHelper.get_config()
         os.remove(cfg.ut_current_tc)
 
 class CacheFsUnitTest(unittest.TestCase):
 
     def setUp(self):
         self.sut = cachefs.CacheFs()
-        self.sut.cfg = TestHelper.get_cfg_for_test()
+        self.sut.cfg = TestHelper.get_config()
 
     def tearDown(self):
         pass
@@ -299,7 +299,7 @@ class CacheFsModuleTest(ModuleTestCase):
         pass
 
     def setUpImpl(self):
-        cfg = self.cfg = TestHelper.get_cfg_for_test()
+        cfg = self.cfg = TestHelper.get_config()
         mountpoint = cfg.cache_fs.cache_fs_mountpoint
         self.assertTrue(not os.path.ismount(mountpoint), msg=mountpoint)
         if not os.path.exists(mountpoint):
@@ -508,7 +508,7 @@ class SymbolicLinks(CacheFsModuleTest):
 class CacheManagerModuleTest(ModuleTestCase):
 
     def setUpImpl(self):
-        self.cfg = TestHelper.get_cfg_for_test()
+        self.cfg = TestHelper.get_config()
         self.sut = cachefs.CacheManager(self.cfg.cache_manager)
         TestHelper.create_source_dir(self.cfg.cache_manager)
         self.sut.run()

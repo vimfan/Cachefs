@@ -12,7 +12,7 @@ class Config(object):
 
         def __init__(self):
             self.cache_fs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/cachefs'
-            self.fusermount_bin   =    '/usr/bin/fusermount'
+            self.fusermount_bin   =    '/bin/fusermount'
 
     def __init__(self):
         self.cache_manager = Config.CacheManagerConfig()
