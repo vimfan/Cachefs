@@ -341,6 +341,9 @@ class File(FsObject):
     def __init__(self, fh, name):
         self.fh = fh
         self.name = name
+	self.stat = Stat(stat.S_IFREG | 0777, 0, 1, os.getuid(), os.getgid())
+	self.direct_io = False
+	self.keep_cache = False
 
 class MemoryCache(object):
 
@@ -540,23 +543,23 @@ class CacheManager(object):
             memstat = self.memcache.get_attributes(relative_path)
         return memstat.stat
 
+    def _get_attributes_for_cached_file(self, rel_path, path_to_cache):
+        st = os.lstat(path_to_cache)
+	if stat.S_ISREG(st.st_mode):
+	    return Stat(st.st_mode, st.st_size, 1, os.getuid(), os.getgid()) # TODO: do we really need special Stat preparation?
+        elif stat.S_ISDIR(st.st_mode):
+           if not self._has_init_stamp(rel_path):
+                try:
+                    self._cache_directory(rel_path)
+                except:
+                    ERROR("Cannot cache directory %s" % rel_path)
+        return st
+
     def _get_attributes(self, relative_path):
-        try:
-            path_to_cache = self._cache_path(relative_path)
-            st = os.lstat(path_to_cache)
-            if stat.S_ISREG(st.st_mode):
-                return Stat(st.st_mode, st.st_size, 1, os.getuid(), os.getgid())
-            elif stat.S_ISLNK(st.st_mode):
-                return st
-            else:
-                if not self._has_init_stamp(relative_path):
-                    try:
-                        self._cache_directory(relative_path)
-                    except:
-                        ERROR("Cannot cache directory %s" % relative_path)
-                return st
-        except OSError, ex:
-            DEBUG(ex)
+        path_to_cache = self._cache_path(relative_path)
+	if os.path.exists(path_to_cache):
+            return self._get_attributes_for_cached_file(relative_path, path_to_cache)
+	else:
             path_dir = os.path.dirname(relative_path)
             has_stamp = self._has_init_stamp(path_dir)
             if has_stamp:
@@ -579,8 +582,8 @@ class CacheManager(object):
                 try:
                     path_to_source = self._absolute_source_path(relative_path)
                     st = os.lstat(path_to_source)
-                    assert(stat.S_ISDIR(st.st_mode))
-                    self._cache_directory(relative_path)
+                    if (stat.S_ISDIR(st.st_mode)):
+	                self._cache_directory(relative_path)
                     return st
                 except OSError, ex:
                     DEBUG(ex)
