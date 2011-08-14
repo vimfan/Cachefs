@@ -275,16 +275,6 @@ class CacheFs(fuse.Fuse):
     def truncate(self, path, size):
         return 0
 
-    ### DIRECTORY OPERATION METHODS ###
-    # Methods in this section are operations for opening directories and
-    # working on open directories.
-    # "opendir" is the method for opening directories. It *may* return an
-    # arbitrary Python object (not None or int), which is used as a dir
-    # handle by the methods for working on directories.
-    # All the other methods (readdir, fsyncdir, releasedir) are methods for
-    # working on directories. They should all be prepared to accept an
-    # optional dir-handle argument, which is whatever object "opendir"
-    # returned.
     @method_logger
     def releasedir(self, path, dh = None):
         pass
@@ -293,17 +283,6 @@ class CacheFs(fuse.Fuse):
     def fsyncdir(self, path, datasync, dh):
         pass
 
-    ### FILE OPERATION METHODS ###
-    # Methods in this section are operations for opening files and working on
-    # open files.
-    # "open" and "create" are methods for opening files. They *may* return an
-    # arbitrary Python object (not None or int), which is used as a file
-    # handle by the methods for working on files.
-    # All the other methods (fgetattr, release, read, write, fsync, flush,
-    # ftruncate and lock) are methods for working on files. They should all be
-    # prepared to accept an optional file-handle argument, which is whatever
-    # object "open" or "create" returned.
-       
     @method_logger
     def fgetattr(self, path, fh):
         return fh.stat
@@ -404,6 +383,7 @@ class CacheManager(object):
             dirs, files, links = [], [], []
             dirpath = ''.join([self.rootpath, self.relpath])
             for entry in os.listdir(dirpath):
+                DEBUG(entry)
                 try:
                     full_path = os.sep.join([dirpath, entry])
                     st = os.lstat(full_path)
@@ -557,37 +537,26 @@ class CacheManager(object):
 
     def _get_attributes(self, relative_path):
         path_to_cache = self._cache_path(relative_path)
-	if os.path.exists(path_to_cache):
-            return self._get_attributes_for_cached_file(relative_path, path_to_cache)
-	else:
+        if os.path.exists(path_to_cache):
+			return self._get_attributes_for_cached_file(relative_path, path_to_cache)
+        else:
+            path_to_source = self._absolute_source_path(relative_path) 
             path_dir = os.path.dirname(relative_path)
             has_stamp = self._has_init_stamp(path_dir)
             if has_stamp:
-                filepath = self.path_transformer.transform_filepath(path_to_cache)
-                if os.path.lexists(filepath):
-                    #return Stat(stat.S_IFREG | 0554, 0, 1, os.getuid(), os.getgid())
-                    # FIXME: retrieve attributes from MemCache
-                    return "Segfault Oo"
-                try:
-                    dirpath = self.path_transformer.transform_dirpath(path_to_cache)
-                    if os.path.exists(dirpath):
-                        self._cache_directory(relative_path)
-                        return os.lstat(path_to_cache)
-                    else:
-                        return None
-                except OSError, ex:
-                    DEBUG(ex)
+                if os.path.lexists(self.path_transformer.transform_filepath(relative_path)):
+                    return os.lstat(path_to_source)
+                else:
                     return None
-            else:
-                try:
-                    path_to_source = self._absolute_source_path(relative_path)
+            else: 
+                self._cache_directory(path_dir)
+                if os.path.lexists(path_to_source):
                     st = os.lstat(path_to_source)
-                    if (stat.S_ISDIR(st.st_mode)):
-	                self._cache_directory(relative_path)
+                    if stat.S_ISDIR(st.st_mode):
+                        self._cache_directory(relative_path)
                     return st
-                except OSError, ex:
-                    DEBUG(ex)
-                    return None
+                else:
+                   return None
 
     @method_logger
     def _cache_directory(self, rel_path):

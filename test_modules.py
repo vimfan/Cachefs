@@ -337,7 +337,7 @@ class TestDirectoriesOnly(CacheFsModuleTest):
 
     @logger_tm
     def test(self):
-        '''Module test: Check directories'''
+        '''App test: directories'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
         self.assertTrue(TestDirectoriesOnly.SUBDIR_1 in dirs)
@@ -380,7 +380,7 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
 
     @logger_tm
     def test(self):
-        '''Module test: Check directories and files'''
+        '''App test: Check directories and files'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
 
@@ -447,7 +447,7 @@ class RelativePaths(CacheFsModuleTest):
 
     @logger_tm
     def test(self):
-        '''Module test: Relative paths'''
+        '''App test: Relative paths'''
 
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         cls = RelativePaths
@@ -466,6 +466,31 @@ class RelativePaths(CacheFsModuleTest):
         self.assertTrue(os.path.lexists(rel_filepath2))
         self.assertEqual(cls.FILE_CONTENT_2, open(rel_filepath2).read())
 
+class GetattrFs(CacheFsModuleTest):
+    def precondition(self):
+        def create_file(permissions):
+            TestHelper.execute_source(self.cfg, '''
+                    touch {pmss}
+                    chmod {pmss} {pmss}
+                    '''.format(pmss = permissions))
+
+        create_file('0111')
+        create_file('0222')
+        create_file('0444')
+        create_file('0777')
+        create_file('0700')
+        create_file('0070')
+        create_file('0007')
+
+    def test(self):
+        '''App test: file permissions'''
+        def getstat(path):
+            full_path = os.sep.join([self.cfg.cache_fs.cache_fs_mountpoint, path])
+            return os.lstat(full_path)
+
+        st = getstat('0777')
+
+
 class SymbolicLinks(CacheFsModuleTest):
 
     def precondition(self):
@@ -478,11 +503,14 @@ class SymbolicLinks(CacheFsModuleTest):
             mkdir -p i/f/g
             touch i/f/g/2.txt
 
-            ln -s ../../../i/f/g e/f/g/j''')
+            ln -s ../../../i/f/g e/f/g/j
+            ln -s a b
+            ln -s ../../../i/f/g/2.txt e/f/g/link_to_e
+            ''')
 
     @logger_tm
     def test(self):
-        '''Module test: Symbolic links'''
+        '''App test: Symbolic links'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
 
         full_path = os.sep.join([mountpoint, 'a/b/c'])
@@ -511,6 +539,15 @@ class SymbolicLinks(CacheFsModuleTest):
 
         full_path = os.sep.join([mountpoint, 'e/f/g/j/1.txt'])
         self.assertFalse(os.path.exists(full_path))
+
+        full_path = os.sep.join([mountpoint, 'b'])
+        self.assertTrue(os.path.lexists(full_path))
+        self.assertTrue(os.path.islink(full_path))
+
+        full_path = os.sep.join([mountpoint, 'e/f/g/link_to_e'])
+        self.assertTrue(os.path.lexists(full_path))
+        self.assertTrue(os.path.islink(full_path))
+        self.assertTrue(os.path.exists(full_path))
 
 
 class CacheManagerModuleTest(ModuleTestCase):
@@ -598,8 +635,10 @@ class ListDir(CacheManagerModuleTest):
 
         self.assertFalse(os.path.exists(cached_file_path))
 
+
 class Getattr(CacheManagerModuleTest):
     @logger_tm
     def test(self):
         self.sut.get_attributes('.')
+
 
