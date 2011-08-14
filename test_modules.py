@@ -309,7 +309,7 @@ class CacheFsModuleTest(ModuleTestCase):
         self.runner = runner.CacheFsRunner(test_config)
         mountpoint = cfg.cache_fs.cache_fs_mountpoint
         cmdline_options = [
-            '--source-dir=%s' % cfg.cache_manager.source_dir, 
+            '--source-dir=%s' % cfg.cache_manager.source_dir,
             '--cache-dir=%s' % cfg.cache_manager.cache_root_dir
         ]
         self.runner.run(mountpoint, cmdline_options)
@@ -463,20 +463,18 @@ class RelativePaths(CacheFsModuleTest):
         self.assertEqual(cls.FILE_CONTENT_2, open(rel_filepath2).read())
 
 class GetattrFs(CacheFsModuleTest):
+
+    permissions = [ 0111, 0222, 0444, 0777, 0700, 0070, 0007 ]
+
     def precondition(self):
         def create_file(permissions):
             TestHelper.execute_source(self.cfg, '''
-                    touch {pmss}
-                    chmod {pmss} {pmss}
-                    '''.format(pmss = permissions))
+                    touch {pmss:o}
+                    chmod {pmss:o} {pmss:o}
+            '''.format(pmss = permissions)) # x:o - i.e. x converted to oct format
 
-        create_file('0111')
-        create_file('0222')
-        create_file('0444')
-        create_file('0777')
-        create_file('0700')
-        create_file('0070')
-        create_file('0007')
+        for item in GetattrFs.permissions:
+            create_file(item)
 
     def test(self):
         '''App test: file permissions'''
@@ -484,8 +482,14 @@ class GetattrFs(CacheFsModuleTest):
             full_path = os.sep.join([self.cfg.cache_fs.cache_fs_mountpoint, path])
             return os.lstat(full_path)
 
-        st = getstat('0777')
+        def check(permission):
+            st = getstat("{path:o}".format(path=permission))
+            s_format = "permission(=0{permission:o}) & st_mode(=0{st_mode:o}) != permission(=0{merge:o}) for file with name (sic!) 0{permission:o}"
+            self.assertEqual(permission, permission & st.st_mode, 
+                s_format.format(permission=permission, st_mode=st.st_mode, merge=permission & st.st_mode))
 
+        for item in GetattrFs.permissions:
+            check(item)
 
 class SymbolicLinks(CacheFsModuleTest):
 
@@ -608,7 +612,7 @@ class ListDir(CacheManagerModuleTest):
         TestHelper.create_source_file(cfg, file_path, 'file_content ... ')
 
         self.assertTrue(self.sut.exists(dir_path))
-        #precond: 
+        #precond:
         self.sut.get_attributes(dir_path)
 
         list_dir_out = self.sut.list_dir(dir_path)
@@ -617,7 +621,7 @@ class ListDir(CacheManagerModuleTest):
         input = [file_name, subdir_name]
         self.assertEqual(sorted(input), sorted(list_dir_out))
 
-        cache_root_path = self.sut.cfg.cache_root_dir 
+        cache_root_path = self.sut.cfg.cache_root_dir
         cache_dir_walker = cachefs.CacheManager.CachedDirWalker(cache_root_path)
         path_transformer = cachefs.CacheManager.PathTransformer()
 
