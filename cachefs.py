@@ -525,8 +525,8 @@ class CacheManager(object):
 
     def _get_attributes_for_cached_file(self, rel_path, path_to_cache):
         st = os.lstat(path_to_cache)
-	if stat.S_ISREG(st.st_mode):
-	    return Stat(st.st_mode, st.st_size, 1, os.getuid(), os.getgid()) # TODO: do we really need special Stat preparation?
+        if stat.S_ISREG(st.st_mode):
+            return Stat(st.st_mode, st.st_size, 1, os.getuid(), os.getgid()) # TODO: do we really need special Stat preparation?
         elif stat.S_ISDIR(st.st_mode):
            if not self._has_init_stamp(rel_path):
                 try:

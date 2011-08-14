@@ -395,13 +395,9 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
         file1_path = os.sep.join([mountpoint, files[0]])
         self.assertTrue(os.path.exists(file1_path))
         file = open(file1_path)
-        time.sleep(1)
         read_content = file.read()
         file.close()
         self.assertEqual(cls.FILE_1_CONTENT, read_content)
-
-        time.sleep(1)
-
         '''
         dir_path = os.sep.join([mountpoint, dirs[0]])
 
