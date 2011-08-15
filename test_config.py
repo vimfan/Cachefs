@@ -4,7 +4,7 @@ import time
 
 def getConfig():
     test_config                      = config.getConfig()
-    test_config.ut_tests_root        = '/home/seba/job/nsn/ssh_cache_fs/test'
+    test_config.ut_tests_root        = '/home/seba/job/nsn/cache_fs/test'
     common_prefix                    = os.sep.join([test_config.ut_tests_root, 'current'])
     test_config.ut_current_tc        = common_prefix
 

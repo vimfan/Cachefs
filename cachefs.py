@@ -96,7 +96,6 @@ def method_logger(f):
 class CacheFs(fuse.Fuse):
 
     def __init__(self, *args, **kw):
-        #super(CacheFs, self).__init__(*args, **kwargs)
         fuse.Fuse.__init__(self, *args, **kw)
         self.cfg = None
         self.cache_mgr = None #
@@ -537,16 +536,23 @@ class CacheManager(object):
 
     def _get_attributes(self, relative_path):
         path_to_cache = self._cache_path(relative_path)
-        if os.path.exists(path_to_cache):
+        if os.path.lexists(path_to_cache):
 			return self._get_attributes_for_cached_file(relative_path, path_to_cache)
         else:
             path_to_source = self._absolute_source_path(relative_path) 
             path_dir = os.path.dirname(relative_path)
             has_stamp = self._has_init_stamp(path_dir)
             if has_stamp:
-                if os.path.lexists(self.path_transformer.transform_filepath(relative_path)):
+                transformed_filepath = self._cache_path(self.path_transformer.transform_filepath(relative_path))
+                transformed_dirpath = self._cache_path(self.path_transformer.transform_dirpath(relative_path))
+                DEBUG("FILEPATH: %s" % transformed_filepath)
+                DEBUG("DIRPATH: %s" % transformed_dirpath)
+                if (os.path.lexists(transformed_filepath) 
+                        or os.path.lexists(transformed_dirpath)):
+                    DEBUG("ONE")
                     return os.lstat(path_to_source)
                 else:
+                    DEBUG("TWO")
                     return None
             else: 
                 self._cache_directory(path_dir)
