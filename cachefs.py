@@ -208,7 +208,7 @@ class CacheFs(fuse.Fuse):
 
     @method_logger
     def read(self, path, size, offset, fh):
-        #os.lseek(fh.fh, offset, 0)
+        os.lseek(fh.fh, offset, 0)
         self.filebuffer = os.read(fh.fh, size)
         #self.filebuffer.append();
         return self.filebuffer

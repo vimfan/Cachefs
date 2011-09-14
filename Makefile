@@ -8,10 +8,12 @@ tags: *.py
 	ctags -R * --language-force=python
 
 tests:
-	nosetests -v --with-id $(ID)
+	nosetests-2.7 -v 
+test:
+	nosetests-2.7 -v --with-id $(ID)
 
 coverage:
-	nosetests -v --with-coverage --cover-package=sshcachefs
+	nosetests-2.7 -v --with-coverage --cover-package=sshcachefs
 	$(COVERAGE_BIN) report
 	$(COVERAGE_BIN) html
 

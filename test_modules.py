@@ -150,6 +150,10 @@ class TestHelper:
 
 class ModuleTestCase(unittest.TestCase):
 
+    def __init__(self, *args, **kw):
+        unittest.TestCase.__init__(self, *args, **kw)
+        self.__test_dir = None
+
     def setUp(self):
         cfg = TestHelper.get_cfg()
         tests_root = cfg.ut_tests_root
@@ -574,7 +578,7 @@ class RelativePaths(CacheFsModuleTest):
 
 class GetattrFs(CacheFsModuleTest):
 
-    permissions = [ 0111, 0222, 0444, 0777, 0700, 0070, 0007 ]
+    permissions = [ 0111, 0222, 0444, 0777, 0700, 0070, 07777, 04444, 01111 ]
 
     def precondition(self):
         def create_file(permissions):
@@ -583,8 +587,23 @@ class GetattrFs(CacheFsModuleTest):
                     chmod {pmss:o} {pmss:o}
             '''.format(pmss = permissions)) # x:o - i.e. x converted to oct format
 
+        def create_dir(permissions):
+            TestHelper.execute_source(self.cfg, '''
+                    mkdir {pmss:o}_dir
+                    chmod {pmss:o} {pmss:o}_dir
+            '''.format(pmss = permissions)) # x:o - i.e. x converted to oct format
+
         for item in GetattrFs.permissions:
             create_file(item)
+            create_dir(item)
+
+    def cleanupWorkspaceImpl(self):
+        # additional task to have permission to cleanup 
+        cachefs.DEBUG("cleanup LALALA")
+        TestHelper.execute_source(self.cfg, '''
+                chmod +rwx -R .
+                ''')
+        CacheFsModuleTest.cleanupWorkspaceImpl(self)
 
     def test(self):
         '''App test: file permissions'''
@@ -595,12 +614,18 @@ class GetattrFs(CacheFsModuleTest):
         def check(permission):
             st = getstat("{path:o}".format(path=permission))
             s_format = "permission(=0{permission:o}) & st_mode(=0{st_mode:o}) != permission(=0{merge:o}) for file with name (sic!) 0{permission:o}"
-            self.assertEqual(permission, permission & st.st_mode, 
-                s_format.format(permission=permission, st_mode=st.st_mode, merge=permission & st.st_mode))
-            # FIXME: incorrect check
+            self.assertEqual(permission, st.st_mode & 07777, 
+                s_format.format(permission=permission, st_mode=st.st_mode & 07777, merge=permission & st.st_mode))
+
+        def check_dir(permission):
+            st = getstat("{path:o}_dir".format(path=permission))
+            s_format = "permission(=0{permission:o}) & st_mode(=0{st_mode:o}) != permission(=0{merge:o}) for file with name (sic!) 0{permission:o}"
+            self.assertEqual(permission, st.st_mode & 07777, 
+                s_format.format(permission=permission, st_mode=st.st_mode & 07777, merge=permission & st.st_mode))
 
         for item in GetattrFs.permissions:
             check(item)
+            check_dir(item)
 
 class SymbolicLinks(CacheFsModuleTest):
 
@@ -689,15 +714,30 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
     @logger_tm
     def precondition(self):
         self._test.precondition()
-        
+
+        '''
+    def cleanupWorkspace(self):
+        self._test.cleanupWorkspace()
+        CacheFsModuleTest.cleanupWorkspace(self)
+
+    def tearDownImpl(self):
+        self._test.tearDownImpl()
+        CacheFsModuleTest.tearDownImpl(self)
+        '''
+
     @logger_tm
     def test(self):
+        cachefs.DEBUG("Test Setup")
+        #self._test.setUp()
         cachefs.DEBUG("Initial Test")
         self._test.test()
         cachefs.DEBUG("Restart CacheFs")
         self._restart_cachefs()
         cachefs.DEBUG("Repeat the test after CacheFs restart")
         self._test.test()
+        cachefs.DEBUG("Test TearDown")
+        #self._test.tearDown()
+
 
 class TestDirectoriesOnlyAfterReboot(CacheFsModuleTestAfterReboot):
 

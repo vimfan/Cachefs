@@ -5,6 +5,7 @@ import subprocess
 import os
 import time
 import logging
+import signal
 
 class CacheFsRunner(object):
 
