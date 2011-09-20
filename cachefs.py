@@ -217,10 +217,12 @@ class CacheFs(fuse.Fuse):
     def open(self, path, flags):
         cache_path = self.cache_mgr._cache_path(path)
         if not os.path.exists(cache_path):
+            # TODO: is it still needed?
             DEBUG("Cache path not exists: %s" % cache_path)
             cache_path = self.cache_mgr.read_link(path)
             DEBUG("%s shall now be cached" % cache_path)
-        return File(os.open(cache_path, flags), os.path.basename(path))
+        st = os.lstat(cache_path)
+        return File(os.open(cache_path, flags), os.path.basename(path), st.st_size)
 
     @method_logger
     def release(self, path, flags, fh):
@@ -316,12 +318,12 @@ class Dir(FsObject):
 
 class File(FsObject):
 
-    def __init__(self, fh, name):
+    def __init__(self, fh, name, size):
         self.fh = fh
         self.name = name
-	self.stat = Stat(stat.S_IFREG | 0777, 0, 1, os.getuid(), os.getgid())
-	self.direct_io = False
-	self.keep_cache = False
+        self.stat = Stat(stat.S_IFREG | 0777, size, 1, os.getuid(), os.getgid())
+        self.direct_io = False
+        self.keep_cache = False
 
 class MemoryCache(object):
 
@@ -342,7 +344,6 @@ class MemoryCache(object):
         self._readlink = {}
 
     def get_attributes(self, path):
-        DEBUG("MEMORY CACHED_FILE ATTRIBUTES: %s %s" % (len(self._attributes), self._attributes.keys()))
         if self._attributes.has_key(path):
             entry = self._attributes[path]
             if entry.timestamp - time.time() > 60:
@@ -353,7 +354,6 @@ class MemoryCache(object):
         return None
 
     def read_link(self, path):
-        DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
         if self._readlink.has_key(path):
             entry = self._readlink[path]
             if entry.timestamp - time.time() > 60: # TODO: parametrize this
@@ -524,9 +524,7 @@ class CacheManager(object):
 
     def _get_attributes_for_cached_file(self, rel_path, path_to_cache):
         st = os.lstat(path_to_cache)
-        if stat.S_ISREG(st.st_mode):
-            return Stat(st.st_mode, st.st_size, 1, os.getuid(), os.getgid()) # TODO: do we really need special Stat preparation?
-        elif stat.S_ISDIR(st.st_mode):
+        if stat.S_ISDIR(st.st_mode):
            if not self._has_init_stamp(rel_path):
                 try:
                     self._cache_directory(rel_path)
@@ -545,14 +543,10 @@ class CacheManager(object):
             if has_stamp:
                 transformed_filepath = self._cache_path(self.path_transformer.transform_filepath(relative_path))
                 transformed_dirpath = self._cache_path(self.path_transformer.transform_dirpath(relative_path))
-                DEBUG("FILEPATH: %s" % transformed_filepath)
-                DEBUG("DIRPATH: %s" % transformed_dirpath)
                 if (os.path.lexists(transformed_filepath) 
                         or os.path.lexists(transformed_dirpath)):
-                    DEBUG("ONE")
                     return os.lstat(path_to_source)
                 else:
-                    DEBUG("TWO")
                     return None
             else: 
                 self._cache_directory(path_dir)
