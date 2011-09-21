@@ -578,7 +578,7 @@ class RelativePaths(CacheFsModuleTest):
 
 class GetattrFs(CacheFsModuleTest):
 
-    permissions = [ 0111, 0222, 0444, 0777, 0700, 0070, 07777, 04444, 01111 ]
+    permissions = [  0444, 0777, 0700, 07777, 04444 ]
 
     def precondition(self):
         def create_file(permissions):
