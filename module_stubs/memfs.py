@@ -51,9 +51,25 @@ import datetime
 import time
 import calendar
 import logging
+import traceback
+
+import memfs_log
+
+def dbLoggable(f):
+    def wrapper(*args, **kw):
+        func_name = f.func_name
+        retval = f(*args, **kw)
+        try:
+            memfs_log.insert(func_name, [args[1:], kw], retval)
+        except:
+            exc_traceback = traceback.format_exc()
+            logging.info("func_name: " + func_name)
+            logging.info(exc_traceback)
+        return retval
+    return wrapper
 
 LOG_FILENAME = "LOG"
-logging.basicConfig(filename=LOG_FILENAME,level=logging.INFO,)
+logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
@@ -274,6 +290,8 @@ class File(FSObject):
             st_gid=gid)
         self.data = data
         self.parent = parent
+        self.direct_io = False
+        self.keep_cache = False
 
     def read(self, size, offset):
         """
@@ -423,6 +441,7 @@ class MemFS(fuse.Fuse):
         """
         logging.info("File system mounted")
         self.root_dir = Dir('/', stat.S_IFDIR|0755, os.getuid(), os.getgid())
+        memfs_log.create_database('memfs_log.sqlite3')
 
     def fsdestroy(self):
         """
@@ -430,7 +449,9 @@ class MemFS(fuse.Fuse):
         It doesn't have to exist, or do anything.
         """
         logging.info("Unmounting file system")
+        memfs_log.drop_database()
 
+    @dbLoggable
     def statfs(self):
         """
         Retrieves information about the mounted filesystem.
@@ -455,6 +476,7 @@ class MemFS(fuse.Fuse):
         # Fill it in here. All fields take on a default value of 0.
         return stats
 
+    @dbLoggable
     def getattr(self, path):
         """
         Retrieves information about a file (the "stat" of a file).
@@ -470,6 +492,7 @@ class MemFS(fuse.Fuse):
         return file.stat
 
     # Note: utime is deprecated in favour of utimens.
+    @dbLoggable
     def utime(self, path, times):
         """
         Sets the access and modification times on a file.
@@ -487,6 +510,7 @@ class MemFS(fuse.Fuse):
         file.stat.set_times_to_now(ctime=True)
         return 0
 
+    @dbLoggable
     def access(self, path, flags):
         """
         Checks permissions for accessing a file or directory.
@@ -508,6 +532,7 @@ class MemFS(fuse.Fuse):
         else:
             return -errno.EACCES
 
+    @dbLoggable
     def readlink(self, path):
         """
         Get the target of a symlink.
@@ -517,6 +542,7 @@ class MemFS(fuse.Fuse):
         logging.info("readlink: %s" % path)
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def mknod(self, path, mode, rdev):
         """
         Creates a non-directory file (or a device node).
@@ -558,6 +584,7 @@ class MemFS(fuse.Fuse):
         parent.stat.set_times_to_now(mtime=True)
         return 0
 
+    @dbLoggable
     def mkdir(self, path, mode):
         """
         Creates a directory.
@@ -593,6 +620,7 @@ class MemFS(fuse.Fuse):
         parent.stat.set_times_to_now(mtime=True)
         return 0
 
+    @dbLoggable
     def unlink(self, path):
         """Deletes a file."""
         logging.info("unlink: %s" % path)
@@ -601,6 +629,7 @@ class MemFS(fuse.Fuse):
             return -errno.ENOENT
         return self._unlink(file)
 
+    @dbLoggable
     def rmdir(self, path):
         """Deletes a directory."""
         logging.info("rmdir: %s" % path)
@@ -616,6 +645,7 @@ class MemFS(fuse.Fuse):
             dir.parent.stat.st_nlink -= 1
         return r
 
+    @dbLoggable
     def symlink(self, target, name):
         """
         Creates a symbolic link from path to target.
@@ -638,6 +668,7 @@ class MemFS(fuse.Fuse):
         logging.info("symlink: target %s, name: %s" % (target, name))
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def link(self, target, name):
         """
         Creates a hard link from name to target. Note that both paths are
@@ -647,6 +678,7 @@ class MemFS(fuse.Fuse):
         logging.info("link: target %s, name: %s" % (target, name))
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def rename(self, old, new):
         """
         Moves a file from old to new. (old and new are both full paths, and
@@ -659,16 +691,19 @@ class MemFS(fuse.Fuse):
         logging.info("rename: target %s, name: %s" % (old, new))
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def chmod(self, path, mode):
         """Changes the mode of a file or directory."""
         logging.info("chmod: %s (mode %s)" % (path, oct(mode)))
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def chown(self, path, uid, gid):
         """Changes the owner of a file or directory."""
         logging.info("chown: %s (uid %s, gid %s)" % (path, uid, gid))
         return -errno.EOPNOTSUPP
 
+    @dbLoggable
     def truncate(self, path, size):
         """
         Shrink or expand a file to a given size.
@@ -697,6 +732,7 @@ class MemFS(fuse.Fuse):
     # optional dir-handle argument, which is whatever object "opendir"
     # returned.
 
+    @dbLoggable
     def opendir(self, path):
         """
         Checks permissions for listing a directory.
@@ -720,12 +756,14 @@ class MemFS(fuse.Fuse):
         else:
             return -errno.EACCES
 
+    @dbLoggable
     def releasedir(self, path, dh):
         """
         Closes an open directory. Allows filesystem to clean up.
         """
         logging.info("releasedir: %s (dh %s)" % (path, dh))
 
+    @dbLoggable
     def fsyncdir(self, path, datasync, dh):
         """
         Synchronises an open directory.
@@ -734,6 +772,7 @@ class MemFS(fuse.Fuse):
         logging.info("fsyncdir: %s (datasync %s, dh %s)"
             % (path, datasync, dh))
 
+    @dbLoggable
     def readdir(self, path, offset, dh):
         """
         Generator function. Produces a directory listing.
@@ -765,6 +804,7 @@ class MemFS(fuse.Fuse):
     # prepared to accept an optional file-handle argument, which is whatever
     # object "open" or "create" returned.
 
+    @dbLoggable
     def open(self, path, flags):
         """
         Open a file for reading/writing, and check permissions.
@@ -797,6 +837,7 @@ class MemFS(fuse.Fuse):
         else:
             return -errno.EACCES
 
+    @dbLoggable
     def fgetattr(self, path, fh):
         """
         Retrieves information about a file (the "stat" of a file).
@@ -806,6 +847,7 @@ class MemFS(fuse.Fuse):
         logging.debug("fgetattr: %s (fh %s)" % (path, fh))
         return fh.stat
 
+    @dbLoggable
     def release(self, path, flags, fh):
         """
         Closes an open file. Allows filesystem to clean up.
@@ -813,6 +855,7 @@ class MemFS(fuse.Fuse):
         """
         logging.info("release: %s (flags %s, fh %s)" % (path, oct(flags), fh))
 
+    @dbLoggable
     def fsync(self, path, datasync, fh):
         """
         Synchronises an open file.
@@ -820,6 +863,7 @@ class MemFS(fuse.Fuse):
         """
         logging.info("fsync: %s (datasync %s, fh %s)" % (path, datasync, fh))
 
+    @dbLoggable
     def flush(self, path, fh):
         """
         Flush cached data to the file system.
@@ -828,6 +872,7 @@ class MemFS(fuse.Fuse):
         """
         logging.info("flush: %s (fh %s)" % (path, fh))
 
+    @dbLoggable
     def read(self, path, size, offset, fh):
         """
         Get all or part of the contents of a file.
@@ -849,6 +894,7 @@ class MemFS(fuse.Fuse):
             % (path, size, offset, fh))
         return fh.read(size, offset)
 
+    @dbLoggable
     def write(self, path, buf, offset, fh):
         """
         Write over part of a file.
@@ -867,6 +913,7 @@ class MemFS(fuse.Fuse):
         logging.debug("  buf: %r" % buf)
         return fh.write(buf, offset)
 
+    @dbLoggable
     def ftruncate(self, path, size, fh):
         """
         Shrink or expand a file to a given size.

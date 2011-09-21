@@ -20,12 +20,12 @@ def create_database(filepath):
     __conn = sqlite3.connect(filepath)
     c = __conn.cursor()
     c.execute('''
-            create table {tablename} ( 
+            create table IF NOT EXISTS {tablename} ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 {name} TEXT, 
                 {params} BLOB, 
                 {output} BLOB, 
-                {time} TEXT 
+                {time} TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
                 )'''.format(
                 tablename=__TABLE_NAME,
                 name = MemfsLog.NAME,
@@ -47,11 +47,17 @@ def insert(operation, params = None, output = None):
     global __conn
     assert(__conn)
     c = __conn.cursor()
+    def dumpPickleIfPossible(obj):
+        try:
+            objPickle = pickle.dumps(obj)
+            return objPickle
+        except TypeError, inst:
+            return pickle.dumps(str(obj))
+            
     to_insert = {
         MemfsLog.NAME   : operation,
-        MemfsLog.PARAMS : pickle.dumps(params),
-        MemfsLog.OUTPUT : pickle.dumps(output),
-        MemfsLog.TIME   : "strftime('%Y-%m-%d %H:%M:%f', 'now')"
+        MemfsLog.PARAMS : dumpPickleIfPossible(params),
+        MemfsLog.OUTPUT : dumpPickleIfPossible(output)
     }
     sorted_keys = list(sorted(to_insert.keys()))
     placeholders = ','.join(['?' for i in range(len(to_insert))]) # ?, ?, ?, ?

@@ -321,9 +321,9 @@ class File(FsObject):
     def __init__(self, fh, name, size):
         self.fh = fh
         self.name = name
-        self.stat = Stat(stat.S_IFREG | 0777, size, 1, os.getuid(), os.getgid())
+        self.stat = Stat(stat.S_IFREG | 0555, size, 1, os.getuid(), os.getgid())
         self.direct_io = False
-        self.keep_cache = False
+        self.keep_cache = True
 
 class MemoryCache(object):
 
