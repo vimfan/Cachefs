@@ -951,7 +951,8 @@ def main():
     server.parse(errex=1)
     server.multithreaded = 0
     (options, args) = server.cmdline
-    logging.basicConfig(filename=str(options.log_path), level=logging.INFO, filemode='w')
+    FORMAT="%(asctime)-15s %(message)s"
+    logging.basicConfig(filename=str(options.log_path), level=logging.INFO, filemode='w', format=FORMAT)
 
     g_outPort = commport.OutPort(options.communication_port)
     g_outPort.connect()

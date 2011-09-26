@@ -21,8 +21,9 @@ import test_config
 import cachefs
 import mounter
 from mocks.commport import InPort
+import mocks.time_mock
 
-sys.path.remove("../")
+#sys.path.remove("../")
 
 def logger_tm(f):
     def wrapper(*args, **kw):
@@ -783,15 +784,18 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
     def __init__(self, *args, **kw):
         TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
-'''
 class TestWithMockTimer(CacheFsModuleTest):
 
     def mount_cachefs(self):
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
-
         CacheFsModuleTest.mount_cachefs(self)
 
     def test(self):
+        timeModule = mocks.time_mock.ModuleInterface()
+        timeController = timeModule.getController()
         os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
-'''
+        time.sleep(1)
+        timeController.finalize()
+        timeController.dispose()
+

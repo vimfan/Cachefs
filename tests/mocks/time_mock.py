@@ -83,13 +83,20 @@ class ModuleInterface(object):
 
     @staticmethod
     def runController(timeController):
+        print("runController")
         timeController.initialize()
+        print("initialize()")
         timeController.loop()
 
-    def getController():
+    def getController(self):
+        print("getController")
         self.server = threading.Thread(target=ModuleInterface.runController, args=(self.timeController,))
+        print("gowno")
         self.server.setDaemon(False)
+        print("gowno2")
         self.server.start()
+        print("gowno3")
+        return self.timeController
 
     def initialize(self):
         self.timeMock.initialize()

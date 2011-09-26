@@ -57,7 +57,6 @@ class InPort(object):
         serverThread.start()
 
     def dispose(self):
-        print("shutdown")
         self.server.shutdown()
         os.remove(self.__unixPort)
 
@@ -102,6 +101,6 @@ class Port(InPort, OutPort):
         OutPort.__init__(self, outPort)
 
     def initialize(self):
-        self.listen()
-        self.connect()
+        InPort.listen(self)
+        OutPort.connect(self)
 
