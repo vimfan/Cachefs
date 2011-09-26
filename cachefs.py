@@ -19,13 +19,7 @@ from loclogger import DEBUG, INFO, ERROR, method_logger
 
 import config as config_canonical
 
-try:
-    import mocks.time_mock # for module tests, file available in tests directory
-    time = mocks.time_mock.ModuleInterface()
-    time.initialize()
-except:
-    import time
-
+time = None
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
@@ -257,7 +251,7 @@ class File(FsObject):
     def __init__(self, fh, name, st):
         self.fh = fh
         self.name = name
-        self.stat = Stat(stat.S_IFREG | 0555, size, 1, os.getuid(), os.getgid())
+        self.stat = Stat(stat.S_IFREG | 0555, st.st_size, 1, os.getuid(), os.getgid())
         self.direct_io = False
         self.keep_cache = True
 
@@ -884,6 +878,27 @@ def main():
         server.parser.print_help()
 
 if __name__ == '__main__':
-    main()
+    try:
+        # testing environment with mocked time module
+
+        import mocks.time_mock # file available in tests directory
+        time = mocks.time_mock.ModuleInterface()
+        time.initialize()
+        print("MAIN")
+        main()
+        time.dispose()
+
+    except:
+        
+        # standard environment
+        import time as time_module
+        time = time_module
+        main()
+
     INFO("File system unmounted")
+else:
+    print("Not main")
+    import time as time_module
+    time = time_module
+
 

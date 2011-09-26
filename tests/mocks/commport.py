@@ -45,19 +45,21 @@ class InPort(object):
     def __init__(self, unixPort):
         self.eventQueue = Queue.Queue()
         self.__unixPort = unixPort
-        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
-
-    def __del__(self):
-        self.server.shutdown()
-        os.remove(self.__unixPort)
+        self.server = None 
 
     def listen(self):
+        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
         # Start a thread with the server -- that thread will then start one
         # more thread for each request
         serverThread = threading.Thread(target=self.server.serve_forever)
         # Exit the server thread when the main thread terminates
         serverThread.setDaemon(False)
         serverThread.start()
+
+    def dispose(self):
+        print("shutdown")
+        self.server.shutdown()
+        os.remove(self.__unixPort)
 
     def receive(self, timeout = None):
         '''If timeout is set to non-zero, then this invocation will be blocking'''
@@ -98,10 +100,6 @@ class Port(InPort, OutPort):
     def __init__(self, outPort, inPort):
         InPort.__init__(self, inPort)
         OutPort.__init__(self, outPort)
-
-    def __del__(self):
-        OutPort.__del__(self)
-        InPort.__del__(self)
 
     def initialize(self):
         self.listen()

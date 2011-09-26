@@ -64,6 +64,8 @@ class InPortTest(unittest.TestCase):
             eventReceived = inPort.receive(1.0)
             self.assertEqual(event, eventReceived)
 
+        inPort.dispose()
+
     def test_manyEvents(self):
         inPort = InPort(InPortTest.UNIX_SOCKET_ADDR)
         inPort.listen()
@@ -78,6 +80,8 @@ class InPortTest(unittest.TestCase):
         for event in eventsToSent:
             eventReceived = inPort.receive(1.0)
             self.assertEqual(event, eventReceived)
+
+        inPort.dispose()
 
     def tearDown(self):
         pass
@@ -96,8 +100,8 @@ class PortTest(unittest.TestCase):
         inOutPort = Port(PortTest.UNIX_FIRST_ADDR, PortTest.UNIX_SECOND_ADDR)
         outPort = OutPort(PortTest.UNIX_SECOND_ADDR)
 
-        inOutPort.initialize()
         inPort.listen()
+        inOutPort.initialize()
         outPort.connect()
 
         event = 'foo'
@@ -107,6 +111,9 @@ class PortTest(unittest.TestCase):
         event2 = 'bar'
         inOutPort.send(event2)
         self.assertEqual(event2, inPort.receive(1.0))
+
+        inPort.dispose()
+        inOutPort.dispose()
 
     def tearDown(self):
         pass

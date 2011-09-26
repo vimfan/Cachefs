@@ -31,6 +31,8 @@ class TimeTest(unittest.TestCase):
 
         timeController.finalize()
         server.join()
+        timeMock.dispose()
+        timeController.dispose()
 
     '''
     def test_timeModuleTest(self):

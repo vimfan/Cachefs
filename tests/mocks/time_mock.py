@@ -16,6 +16,9 @@ class TimeController(object):
     def finalize(self):
         self.finished = True
 
+    def dispose(self):
+        self._inOutPort.dispose()
+
     def handle(self, event):
         args = event['args']
         kw = event['kw']
@@ -46,6 +49,9 @@ class TimeMock(object):
     def initialize(self):
         self._inOutPort.initialize()
 
+    def dispose(self):
+        self._inOutPort.dispose()
+
     def __getattr__(self, item):
         try:
             return getattr(self, item)
@@ -59,8 +65,8 @@ class TimeMock(object):
 
 class ModuleInterface(object):
 
-    TIMER1_PORT_ADDR = 'TimeMock1.sock'
-    TIMER2_PORT_ADDR = 'TimeMock2.sock'
+    TIMER1_PORT_ADDR = 'TimeController.sock'
+    TIMER2_PORT_ADDR = 'TimeMock.sock'
 
     def __init__(self):
         port1 = ModuleInterface.TIMER1_PORT_ADDR
@@ -80,11 +86,12 @@ class ModuleInterface(object):
         timeController.initialize()
         timeController.loop()
 
-    def initialize(self):
+    def getController():
         self.server = threading.Thread(target=ModuleInterface.runController, args=(self.timeController,))
         self.server.setDaemon(False)
         self.server.start()
 
+    def initialize(self):
         self.timeMock.initialize()
 
     def time(self):

@@ -22,6 +22,8 @@ import cachefs
 import mounter
 from mocks.commport import InPort
 
+sys.path.remove("../")
+
 def logger_tm(f):
     def wrapper(*args, **kw):
         class_name = args[0].__class__.__name__
@@ -385,6 +387,7 @@ class CacheFsModuleTest(ModuleTestCase):
     def cleanupCache(self):
         if self.cache_memfs:
             self.cache_memfs_mounter.unmount()
+            self.cache_memfs_inport.dispose()
         # add some safety checks
         assert(self.cfg.cache_manager.cache_root_dir)
         shutil.rmtree(self.cfg.cache_manager.cache_root_dir)
@@ -392,6 +395,7 @@ class CacheFsModuleTest(ModuleTestCase):
     def cleanupSource(self):
         if self.source_memfs:
             self.source_memfs_mounter.unmount()
+            self.source_memfs_inport.dispose()
         assert(self.cfg.cache_manager.source_dir)
         shutil.rmtree(self.cfg.cache_manager.source_dir)
 
