@@ -7,7 +7,6 @@ import stat
 import subprocess
 import sys
 import time
-import logging
 import datetime
 import calendar
 import errno
@@ -16,83 +15,14 @@ import os      # for filesystem modes (O_RDONLY, etc)
 import fuse
 import traceback
 import string
+import loclogger
+from loclogger import DEBUG, INFO, ERROR, method_logger
 
 import config as config_canonical
 
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
-
-if not os.path.exists("logs"):
-    os.makedirs("logs")
-
-LOG_FILENAME = "logs/LOG%s" % os.getpid()
-#LOG_FILENAME='/dev/null'
-
-if os.path.exists(LOG_FILENAME):
-    os.remove(LOG_FILENAME)
-
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
-
-if os.path.lexists("LOG"):
-    os.unlink("LOG")
-
-os.symlink(LOG_FILENAME, "LOG")
-
-def NO_LOG(msg):
-    pass
-
-def DEBUG(msg):
-    logging.debug(msg)
-
-def INFO(msg):
-    logging.info(msg)
-
-def ERROR(msg):
-    logging.error(msg)
-
-#ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
-
-depth = 0
-def method_logger(f):
-    def wrapper(*args, **kw):
-        global depth
-        try:
-            class_name = args[0].__class__.__name__
-            func_name = f.func_name
-            depth += 1
-            t0 = time.time()
-            DEBUG("%s:%s %s {%s- %s.%s(args: %s, kw: %s)" %
-                          (f.func_code.co_filename,
-                           f.func_code.co_firstlineno,
-                           str(t0),
-                           depth,
-                           class_name,
-                           func_name,
-                           args[1:],
-                           kw))
-            retval = f(*args, **kw)
-            t1 = time.time()
-            DEBUG("%s:%s %s %s -%s} %s.%s(args: %s, kw: %s) -> returns: %s(%r)" %
-                          (f.func_code.co_filename,
-                           f.func_code.co_firstlineno,
-                           str(t1),
-                           str(t1-t0),
-                           depth,
-                           class_name, 
-                           func_name, 
-                           args[1:], 
-                           kw,
-                           type(retval), 
-                           retval))
-            depth -= 1
-            return retval
-        except Exception, inst:
-            ERROR("function: %s, exception: %r" % (f.func_name, inst))
-            exc_traceback = traceback.format_exc()
-            ERROR("Exception traceback: %s" % exc_traceback)
-            raise inst
-    return wrapper
 
 
 class CacheFs(fuse.Fuse):
@@ -112,23 +42,30 @@ class CacheFs(fuse.Fuse):
     def stop(self):
         self.cache_mgr.stop()
 
-    @method_logger
     def parse(self, *args, **kw):
         super(CacheFs, self).parse(*args, **kw)
         self.cfg = config_canonical.getConfig()
 
         options, arguments =  self.cmdline
+
+        loclogger.initialize(options.log_path)
+        
+        if options.debug:
+            loclogger.enableDebug()
+
+        INFO("Options to be interpreted: " + str(options))
+
         self.cfg.cache_manager.cache_root_dir = options.cache_dir
-        DEBUG("Cache root dir: %s" % self.cfg.cache_manager.cache_root_dir)
+        INFO("Cache root dir: %s" % self.cfg.cache_manager.cache_root_dir)
 
         self.cfg.cache_manager.source_dir = options.source_dir
-        DEBUG("Cache source dir: %s" % self.cfg.cache_manager.source_dir)
+        INFO("Cache source dir: %s" % self.cfg.cache_manager.source_dir)
 
         self.cfg.cache_manager.long_stamp = options.long_stamp
         self.cfg.cache_manager.short_stamp = options.short_stamp
 
         self.cfg.cache_fs.cache_fs_mountpoint = self.fuse_args.mountpoint
-        DEBUG("Mountpoint: %s" % self.cfg.cache_fs.cache_fs_mountpoint)
+        INFO("Mountpoint: %s" % self.cfg.cache_fs.cache_fs_mountpoint)
 
         validator = config_canonical.get_validator()
         validator.validate(self.cfg)
@@ -186,17 +123,6 @@ class CacheFs(fuse.Fuse):
 
     @method_logger
     def readdir(self, path, offset = None, dh = None):
-        """
-        Generator function. Produces a directory listing.
-        Yields individual fuse.Direntry objects, one per file in the
-        directory. Should always yield at least "." and "..".
-        Should yield nothing if the file is not a directory or does not exist.
-        (Does not need to raise an error).
-
-        offset: I don't know what this does, but I think it allows the OS to
-        request starting the listing partway through (which I clearly don't
-        yet support). Seems to always be 0 anyway.
-        """
         # Update timestamps: readdir updates atime
         if not self.cache_mgr.exists(path):
             yield 
@@ -220,9 +146,11 @@ class CacheFs(fuse.Fuse):
         cache_path = self.cache_mgr._cache_path(path)
         if not os.path.exists(cache_path):
             # TODO: is it still needed?
-            DEBUG("Cache path not exists: %s" % cache_path)
+            if loclogger.debug:
+                DEBUG("Cache path not exists: %s" % cache_path)
             cache_path = self.cache_mgr.read_link(path)
-            DEBUG("%s shall now be cached" % cache_path)
+            if loclogger.debug:
+                DEBUG("%s shall now be cached" % cache_path)
         st = os.lstat(cache_path)
         return File(os.open(cache_path, flags), os.path.basename(path), st.st_size)
 
@@ -352,7 +280,8 @@ class MemoryCache(object):
                 return None
             return entry
         else:
-            DEBUG("NO CACHE ENTRY FOR %s" % path)
+            if loclogger.debug:
+                DEBUG("NO CACHE ENTRY FOR %s" % path)
         return None
 
     def read_link(self, path):
@@ -367,7 +296,8 @@ class MemoryCache(object):
     def cache_attributes(self, path, st = None):
         # FIXME: workaround - normpath
         self._attributes[string.replace(path, '//', '/')] = MemoryCache.GetattrEntry(st, time.time())
-        DEBUG(os.path.normpath(path))
+        if loclogger.debug:
+            DEBUG(os.path.normpath(path))
 
     def cache_link_target(self, path, target):
         self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
@@ -378,13 +308,15 @@ class CacheManager(object):
 
         class DummyMemcache(object):
             def cache_attributes(self, path, st):
-                DEBUG("DummyMemcache.cache_attributes(%s, %s)" % (path, st))
+                if loclogger.debug: 
+                    DEBUG("DummyMemcache.cache_attributes(%s, %s)" % (path, st))
 
         def walk(self):
             dirs, files, links = [], [], []
             dirpath = ''.join([self.rootpath, self.relpath])
             for entry in os.listdir(dirpath):
-                DEBUG(entry)
+                if loclogger.debug:
+                    DEBUG(entry)
                 try:
                     full_path = os.sep.join([dirpath, entry])
                     st = os.lstat(full_path)
@@ -573,22 +505,27 @@ class CacheManager(object):
             if e.errno == errno.ENOENT and '/' <> parent_path:
                 self._cache_directory(parent_path)
                 os.mkdir(path_to_cache)
-            DEBUG("most likely directory %s already exists" % path_to_cache)
+            if loclogger.debug:
+                DEBUG("most likely directory %s already exists" % path_to_cache)
 
         cache_walker = self._create_cached_dir_walker(path_to_cache)
         source_dir_walker = self._create_dir_walker(self.cfg.source_dir, rel_path)
         source_dir_walker.initialize()
 
-        DEBUG("REMOTE PATH: %s" % source_path)
+        if loclogger.debug:
+            DEBUG("REMOTE PATH: %s" % source_path)
 
         not_cached_files = list(set(source_dir_walker.files) - set(cache_walker.files))
-        DEBUG("Files to be cached: %s" % not_cached_files)
+        if loclogger.debug:
+            DEBUG("Files to be cached: %s" % not_cached_files)
 
         not_cached_dirs = list(set(source_dir_walker.dirs) - set(cache_walker.dirs))
-        DEBUG("Directories to be cached: %s" % not_cached_dirs)
+        if loclogger.debug:
+            DEBUG("Directories to be cached: %s" % not_cached_dirs)
 
         not_cached_links = list(set(source_dir_walker.links) - set(cache_walker.links))
-        DEBUG("Links to be cached: %s" % not_cached_links)
+        if loclogger.debug:
+            DEBUG("Links to be cached: %s" % not_cached_links)
 
         for filename in not_cached_files:
             transformed_filepath = self.path_transformer.transform_filepath(filename)
@@ -891,12 +828,14 @@ def main():
     server.parser.add_option('-x', '--source-dir', 
                              dest="source_dir", 
                              help="Source directory which will be cached",
-                             metavar="MANDATORY_SOURCE_DIR_PATH")
+                             metavar="MANDATORY_SOURCE_DIR_PATH",
+                             type="str")
 
     server.parser.add_option('-c', '--cache-dir',
                              dest='cache_dir',
                              help="Path to directory with cache (will be created if not exists)",
-                             metavar="MANDATORY_CACHE_DIR_PATH")
+                             metavar="MANDATORY_CACHE_DIR_PATH",
+                             type="str")
 
     server.parser.add_option('--long-stamp',
                              dest="long_stamp", 
@@ -911,6 +850,19 @@ def main():
                              metavar="INTERVAL",
                              type="int",
                              default=60)
+
+    server.parser.add_option('--debug',
+                             dest="debug",
+                             help="Enable more verbose logging",
+                             action="store_true",
+                             default=False)
+
+    server.parser.add_option('-l', '--log',
+                             dest="log_path",
+                             help="Path to log file",
+                             metavar='LOG_FILE',
+                             type="str",
+                             default="logs/LOG")
 
     server.flags = 0
     server.multithreaded = 0

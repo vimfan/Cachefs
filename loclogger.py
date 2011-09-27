@@ -2,24 +2,8 @@ import logging
 import os
 import traceback
 
-if not os.path.exists("logs"):
-    os.makedirs("logs")
-
-LOG_FILENAME = "logs/LOG%s" % os.getpid()
-#LOG_FILENAME='/dev/null'
-
-if os.path.exists(LOG_FILENAME):
-    os.remove(LOG_FILENAME)
-
-logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
-
-if os.path.lexists("LOG"):
-    os.unlink("LOG")
-
-os.symlink(LOG_FILENAME, "LOG")
-
-def NO_LOG(msg):
-    pass
+__initialized = False
+debug = False
 
 def DEBUG(msg):
     logging.debug(msg)
@@ -29,6 +13,28 @@ def INFO(msg):
 
 def ERROR(msg):
     logging.error(msg)
+
+def enableDebug():
+    global debug
+    debug = True
+
+def initialize(logfile='logs/LOG'):
+
+    global __initialized
+
+    dirname = os.path.dirname(logfile)
+    if dirname and not os.path.exists(dirname):
+        os.makedirs(dirname)
+
+    if os.path.exists(logfile):
+        os.remove(logfile)
+
+    logging.basicConfig(filename=logfile,level=logging.DEBUG,)
+
+    __initialized = True
+
+def NO_LOG(msg):
+    pass
 
 #ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
 

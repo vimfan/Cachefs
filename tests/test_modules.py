@@ -340,6 +340,7 @@ class CacheFsModuleTest(ModuleTestCase):
     def __init__(self, *args, **kw):
         ModuleTestCase.__init__(self, *args, **kw)
         self.cfg = TestHelper.get_cfg()
+        self.tag = 0 # used for reboot testcases 
 
     def precondition(self):
         pass
@@ -350,6 +351,8 @@ class CacheFsModuleTest(ModuleTestCase):
             self.cfg.cache_fs.cache_fs_mountpoint,
             '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),
             '--cache-dir={cache}'.format(cache=self.cfg.cache_manager.cache_root_dir),
+            '--log={log_path}'.format(log_path=os.path.join(self.cfg.ut_tests_root, "LOG_" + self.__class__.__name__ + str(self.tag))),
+            '--debug',
             '-f' # foreground
         ]
         self.mounter = mounter.FuseFsMounter(cmdline_options)
@@ -648,6 +651,7 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
 
     def _restart_cachefs(self):
         self.mounter.unmount()
+        self.tag += 1 # for another log creation
         self.mount_cachefs()
 
     @logger_tm
