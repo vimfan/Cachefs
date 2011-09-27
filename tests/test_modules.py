@@ -18,7 +18,8 @@ import fuse
 import config
 import test_config
 import cachefs
-import runner
+#import runner
+import mounter
 
 def logger_tm(f):
     def wrapper(*args, **kw):
@@ -414,14 +415,15 @@ class CacheFsModuleTest(ModuleTestCase):
         pass
 
     def mount_cachefs(self):
-        self.runner = runner.CacheFsRunner(test_config)
-        cfg = self.cfg
-        mountpoint = cfg.cache_fs.cache_fs_mountpoint
         cmdline_options = [
-            '--source-dir=%s' % cfg.cache_manager.source_dir,
-            '--cache-dir=%s' % cfg.cache_manager.cache_root_dir
+            os.path.join(config.getProjectRoot(), 'cachefs.py'),
+            self.cfg.cache_fs.cache_fs_mountpoint,
+            '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),
+            '--cache-dir={cache}'.format(cache=self.cfg.cache_manager.cache_root_dir),
+            '-f' # foreground
         ]
-        self.runner.run(mountpoint, cmdline_options)
+        self.mounter = mounter.FuseFsMounter(cmdline_options)
+        self.mounter.mount()
 
     def setUpImpl(self):
         cfg = self.cfg 
@@ -434,7 +436,7 @@ class CacheFsModuleTest(ModuleTestCase):
         self.mount_cachefs();
 
     def tearDownImpl(self):
-        self.runner.stop()
+        self.mounter.unmount()
 
     def cleanupWorkspaceImpl(self):
         TestHelper.remove_source_dir(self.cfg.cache_manager)
@@ -715,7 +717,7 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
         self._test = test
 
     def _restart_cachefs(self):
-        self.runner.stop()
+        self.mounter.unmount()
         self.mount_cachefs()
 
     @logger_tm

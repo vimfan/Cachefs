@@ -1,0 +1,3 @@
+* Add support for relative paths passed to options --cache-dir, and --source-dir, as well as mountpoint
+* Add support to coverage measurement in case of module/component tests
+* 
