@@ -34,14 +34,26 @@ class CacheFsRunner(object):
     def stop(self):
         logging.info("Stopping CacheFs")
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
-        if (os.path.ismount(mountpoint)):
-            logging.info("Calling: fusermount -u %s" % mountpoint)
-            subprocess.call([self.cfg.cache_fs.fusermount_bin, '-u', mountpoint])
-        else:
+
+        if not os.path.ismount(mountpoint):
             pid = self._process_handle.pid
             logging.info("Killing CacheFs")
             os.kill(pid, signal.SIGINT)
+            return
 
+        curr_attempt = 0
+        interval = 0.01
+        num_of_attemps = 1 / interval
+        while os.path.ismount(mountpoint) and curr_attempt < num_of_attemps:
+            logging.info("Calling fusermount -u")
+            try:
+                subprocess.check_call([self.cfg.cache_fs.fusermount_bin, '-u', mountpoint])
+            except subprocess.CalledProcessError, e:
+                time.sleep(0.01)
+                curr_attempt += 1
+        if curr_attempt == num_of_attemps:
+            print("Didn't manage to unmount filesystem")
+        
     def _wait_for_mount(self):
         assert(self._process_handle)
         assert(self.cfg)

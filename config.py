@@ -1,17 +1,23 @@
+import os
+import sys
+
+def getCommonPrefix():
+    return os.getcwd()
+
 class Config(object):
 
     class CacheManagerConfig(object):
 
         def __init__(self):
-            self.cache_root_dir = '/home/seba/job/nsn/ssh_cache_fs/.cache'
-            self.source_dir = '/home/seba/job/nsn/ssh_cache_fs/sshfs'
+            self.cache_root_dir = os.sep.join([getCommonPrefix(), '.cache'])
+            self.source_dir = os.sep.join([getCommonPrefix(), 'sshfs'])
             self.long_stamp = None
             self.short_stamp = None
 
     class CacheFsConfig(object):
 
         def __init__(self):
-            self.cache_fs_mountpoint = '/home/seba/job/nsn/ssh_cache_fs/cachefs'
+            self.cache_fs_mountpoint = os.path.join([getCommonPrefix(), 'cachefs'])
             self.fusermount_bin   =    '/bin/fusermount'
 
     def __init__(self):

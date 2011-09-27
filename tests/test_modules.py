@@ -1,3 +1,7 @@
+import sys
+
+sys.path.append("../")
+
 import shutil
 import os
 import subprocess
@@ -176,6 +180,9 @@ class ModuleTestCase(unittest.TestCase):
         shutil.rmtree(self.__test_dir)
         cfg = TestHelper.get_cfg()
         os.remove(cfg.ut_current_tc)
+
+    def tearDownImpl():
+        pass
 
     def cleanupWorkspaceImpl(self):
         pass
