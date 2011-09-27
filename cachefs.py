@@ -880,28 +880,27 @@ class Stat(fuse.Stat):
         self.st_ctime = self.datetime_epoch(value)
     dt_ctime = property(_get_dt_ctime, _set_dt_ctime)
 
-
 def main():
     usage = """
-    CacheFs: Sshfs read-only cache virtual filesystem.
+    CacheFs: Read-only cache virtual filesystem.
     """ + fuse.Fuse.fusage
     server = CacheFs(version="%prog " + fuse.__version__,
                      usage=usage,
                      dash_s_do='setsingle')
 
-    server.parser.add_option('--source-dir', 
+    server.parser.add_option('-x', '--source-dir', 
                              dest="source_dir", 
-                             help="Source directory which will be cached.",
-                             metavar="PATH")
+                             help="Source directory which will be cached",
+                             metavar="MANDATORY_SOURCE_DIR_PATH")
 
-    server.parser.add_option('--cache-dir',
+    server.parser.add_option('-c', '--cache-dir',
                              dest='cache_dir',
-                             help="Path to directory with cache (will be created if not exists).",
-                             metavar="PATH")
+                             help="Path to directory with cache (will be created if not exists)",
+                             metavar="MANDATORY_CACHE_DIR_PATH")
 
     server.parser.add_option('--long-stamp',
                              dest="long_stamp", 
-                             help="Long time stamp lifetim in seconds. (default: 600)", 
+                             help="Long time stamp lifetime in seconds. (default: 600)", 
                              metavar="INTERVAL", 
                              type="int",
                              default=600)
@@ -922,6 +921,9 @@ def main():
         print str(e)
     except CriticalError, e:
         print str(e)
+    except config_canonical.ConfigValidator.ConfigError, e:
+        print "\n===================================\nError: {error} \n===================================\n".format(error = str(e.msg))
+        server.parser.print_help()
 
 if __name__ == '__main__':
     main()
