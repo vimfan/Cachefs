@@ -152,7 +152,7 @@ class CacheFs(fuse.Fuse):
             if loclogger.debug:
                 DEBUG("%s shall now be cached" % cache_path)
         st = os.lstat(cache_path)
-        return File(os.open(cache_path, flags), os.path.basename(path), st.st_size)
+        return File(os.open(cache_path, flags), os.path.basename(path), st)
 
     @method_logger
     def release(self, path, flags, fh):
@@ -248,12 +248,12 @@ class Dir(FsObject):
 
 class File(FsObject):
 
-    def __init__(self, fh, name, size):
+    def __init__(self, fh, name, st):
         self.fh = fh
         self.name = name
-        self.stat = Stat(stat.S_IFREG | 0777, size, 1, os.getuid(), os.getgid())
+        self.stat = Stat(st, st.st_size, 1, os.getuid(), os.getgid())
         self.direct_io = False
-        self.keep_cache = False
+        self.keep_cache = True
 
 class MemoryCache(object):
 

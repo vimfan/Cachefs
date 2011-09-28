@@ -1,5 +1,6 @@
 import sys
 
+# to make all modules from one directory up visible
 sys.path.append("../")
 
 import shutil
@@ -345,6 +346,18 @@ class CacheFsModuleTest(ModuleTestCase):
     def precondition(self):
         pass
 
+    def mount_cache(self):
+        cmdline_options = [
+            os.path.join(config.getProjectRoot(), 'tests', 'mocks', 'memfs.py'),
+            self.cfg.cache_manager.cache_root_dir,
+            '--log={log_path}'.format(log_path=os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_" + self.__class__.__name__ + str(self.tag))),
+            '-f' # foreground
+        ]
+
+        os.makedirs(self.cfg.cache_manager.cache_root_dir)
+        self.memfs_mounter = mounter.FuseFsMounter(cmdline_options)
+        self.memfs_mounter.mount()
+
     def mount_cachefs(self):
         cmdline_options = [
             os.path.join(config.getProjectRoot(), 'cachefs.py'),
@@ -355,8 +368,8 @@ class CacheFsModuleTest(ModuleTestCase):
             '--debug',
             '-f' # foreground
         ]
-        self.mounter = mounter.FuseFsMounter(cmdline_options)
-        self.mounter.mount()
+        self.cachefs_mounter = mounter.FuseFsMounter(cmdline_options)
+        self.cachefs_mounter.mount()
 
     def setUpImpl(self):
         cfg = self.cfg 
@@ -366,10 +379,12 @@ class CacheFsModuleTest(ModuleTestCase):
             os.makedirs(mountpoint)
         TestHelper.create_source_dir(cfg.cache_manager)
         self.precondition()
+        self.mount_cache()
         self.mount_cachefs();
 
     def tearDownImpl(self):
-        self.mounter.unmount()
+        self.cachefs_mounter.unmount()
+        self.memfs_mounter.unmount()
 
     def cleanupWorkspaceImpl(self):
         TestHelper.remove_source_dir(self.cfg.cache_manager)
@@ -650,7 +665,7 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
         self._test = test
 
     def _restart_cachefs(self):
-        self.mounter.unmount()
+        self.cachefs_mounter.unmount()
         self.tag += 1 # for another log creation
         self.mount_cachefs()
 

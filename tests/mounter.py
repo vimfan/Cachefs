@@ -6,6 +6,7 @@ import time
 import config
 import os
 import logging
+import signal
 
 class FuseFsMounter(object):
 
@@ -27,7 +28,7 @@ class FuseFsMounter(object):
         mountpoint = self._mountpoint
 
         if not os.path.ismount(mountpoint):
-            pid = self._process_handle.pid
+            pid = self._processHandle.pid
             logging.info("killing filesystem process")
             os.kill(pid, signal.SIGINT)
             return

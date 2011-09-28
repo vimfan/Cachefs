@@ -52,9 +52,6 @@ import time
 import calendar
 import logging
 
-LOG_FILENAME = "LOG"
-logging.basicConfig(filename=LOG_FILENAME,level=logging.INFO,)
-
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
 
@@ -255,6 +252,14 @@ class Dir(FSObject):
         self.files = {}
         self.parent = parent
 
+class SymbolicLink(FSObject):
+
+    def __init__(self, name, target, parent):
+        self.target = target
+        self.stat = Stat(stat.S_IFLNK | 0777, len(target), st_nlink=1)
+        self.parent = parent
+        self.name = name
+
 class File(FSObject):
     """
     A non-directory file. May be a regular file, symlink, fifo, etc.
@@ -274,6 +279,8 @@ class File(FSObject):
             st_gid=gid)
         self.data = data
         self.parent = parent
+        self.direct_io = True
+        self.keep_cache = True
 
     def read(self, size, offset):
         """
@@ -352,7 +359,7 @@ class MemFS(fuse.Fuse):
         Creates a new MemFS object. Needs to call fuse.Fuse.__init__ with the
         args (just forward them along).
         """
-        logging.info("Mounting file system")
+        #logging.info("Mounting file system")
         super(MemFS, self).__init__(*args, **kwargs)
 
     def _search_path(self, path):
@@ -514,8 +521,8 @@ class MemFS(fuse.Fuse):
         Returns a bytestring with the contents of a symlink (its target).
         May also return an int error code.
         """
-        logging.info("readlink: %s" % path)
-        return -errno.EOPNOTSUPP
+        logging.info("symlink: path %s" % (path))
+        return self._search_path(path).target
 
     def mknod(self, path, mode, rdev):
         """
@@ -636,7 +643,9 @@ class MemFS(fuse.Fuse):
         on the target system unless followed).
         """
         logging.info("symlink: target %s, name: %s" % (target, name))
-        return -errno.EOPNOTSUPP
+        parent, filename = self._search_new_path(name)
+        parent.files[filename] = SymbolicLink(filename, target, parent)
+        return 0
 
     def link(self, target, name):
         """
@@ -661,8 +670,10 @@ class MemFS(fuse.Fuse):
 
     def chmod(self, path, mode):
         """Changes the mode of a file or directory."""
+        file = self._search_path(path)
+        file.stat.st_mode = mode
         logging.info("chmod: %s (mode %s)" % (path, oct(mode)))
-        return -errno.EOPNOTSUPP
+        return 0
 
     def chown(self, path, uid, gid):
         """Changes the owner of a file or directory."""
@@ -751,7 +762,7 @@ class MemFS(fuse.Fuse):
         dh.stat.set_times_to_now(atime=True)
         yield fuse.Direntry(".")
         yield fuse.Direntry("..")
-        for f in dh.files.keys():
+        for f in  dh.files.keys():
             yield fuse.Direntry(f)
 
     ### FILE OPERATION METHODS ###
@@ -887,8 +898,11 @@ def main():
     """ + fuse.Fuse.fusage
     server = MemFS(version="%prog " + fuse.__version__,
         usage=usage, dash_s_do='setsingle')
+    server.parser.add_option('--log', dest='log_path', help='path to log file', metavar="log_file", type='str', default='MEMFS_LOG')
     server.parse(errex=1)
     server.multithreaded = 0
+    (options, args) = server.cmdline
+    logging.basicConfig(filename=str(options.log_path), level=logging.INFO, filemode='w')
     try:
         server.main()
     except fuse.FuseError, e:
