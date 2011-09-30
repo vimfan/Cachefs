@@ -19,8 +19,8 @@ import fuse
 import config
 import test_config
 import cachefs
-#import runner
 import mounter
+from mocks.commport import InPort
 
 def logger_tm(f):
     def wrapper(*args, **kw):
@@ -46,13 +46,14 @@ class TestHelper:
             source_dir = os.sep.join([cfg.source_dir, path])
         else:
             source_dir = cfg.source_dir
+        print("source_dir: " + source_dir)
         os.makedirs(source_dir)
 
     @staticmethod
     def remove_source_dir(cfg, path = ''):
         assert(cfg.source_dir)
         if path:
-            source_dir = os.sep.join([cfg.source_dir, path])
+            source_dir = os.path.join(cfg.source_dir, path)
         else:
             source_dir = cfg.source_dir
         shutil.rmtree(source_dir)
@@ -99,6 +100,8 @@ class ModuleTestCase(unittest.TestCase):
         if (os.path.lexists(testcase_current)):
             os.unlink(testcase_current)
         os.symlink(tc_wdir, testcase_current)
+        print(cfg.cache_manager.source_dir)
+        TestHelper.create_source_dir(cfg.cache_manager)
 
         return self.setUpImpl()
 
@@ -128,7 +131,6 @@ class CacheFsUnitTest(unittest.TestCase):
     def tearDown(self):
         pass
 
-    @logger_tm
     def test_access(self):
         # inject mock
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
@@ -147,7 +149,6 @@ class CacheFsUnitTest(unittest.TestCase):
         self.assertEqual(failure, self.sut.access('file3', os.W_OK));
         self.assertEqual(success, self.sut.access('file4', os.R_OK | os.X_OK));
 
-    @logger_tm
     def test_readdir(self):
         DIRPATH = '/DIR'
         dir_entries = ['file', 'subdir', 'file2']
@@ -168,7 +169,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(sorted(dir_entries_match), sorted(readdir_entries))
 
-    @logger_tm
     def test_readdir_dir_not_exists(self):
         DIRPATH = '/DIR'
 
@@ -178,7 +178,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.readdir(DIRPATH).next())
 
-    @logger_tm
     def test_readdir_on_file(self):
         DIRPATH = '/DIR'
 
@@ -189,7 +188,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.readdir(DIRPATH).next())
 
-    @logger_tm
     def test_opendir_success(self):
         DIRPATH = '/DIR'
 
@@ -200,7 +198,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(None, self.sut.opendir(DIRPATH))
 
-    @logger_tm
     def test_opendir_not_dir(self):
         FILEPATH = '/FILE'
 
@@ -211,7 +208,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(FILEPATH))
 
-    @logger_tm
     def test_opendir_path_not_exists(self):
         DIRPATH = '/DIR'
 
@@ -221,7 +217,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
 
-    #@logger_tm
     #def test_readlink_success(self):
         #FILEPATH = '/File'
         #CACHED_FILE_PATH = "/ABSOLUTE/PATH/TO/CACHED/FILE"
@@ -232,7 +227,6 @@ class CacheFsUnitTest(unittest.TestCase):
 
         #self.assertEqual(CACHED_FILE_PATH, self.sut.readlink(FILEPATH))
 
-    #@logger_tm
     #def test_readlink_not_found(self):
         #FILEPATH = '/File'
 
@@ -247,7 +241,6 @@ class CacheManagerModuleTest(ModuleTestCase):
     def setUpImpl(self):
         self.cfg = TestHelper.get_cfg()
         self.sut = cachefs.CacheManager(self.cfg.cache_manager)
-        TestHelper.create_source_dir(self.cfg.cache_manager)
         self.sut.run()
 
     def tearDownImpl(self):
@@ -259,13 +252,11 @@ class CacheManagerModuleTest(ModuleTestCase):
 
 class CreateCacheDir(CacheManagerModuleTest):
 
-    @logger_tm
     def test_create_cache_dir(self):
         self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
 
 class Exists(CacheManagerModuleTest):
 
-    @logger_tm
     def test_exists(self):
         file_path = '/TestCacheManager.test_exists.txt'
         TestHelper.create_source_file(self.cfg.cache_manager,
@@ -275,14 +266,12 @@ class Exists(CacheManagerModuleTest):
 
 class ExistsRoot(CacheManagerModuleTest):
 
-    @logger_tm
     def test_exists_root(self):
         file_path = '/'
         self.assertTrue(self.sut.exists(file_path))
 
 class IsDir(CacheManagerModuleTest):
 
-    @logger_tm
     def test_is_dir(self):
         '''CacheManagerModuleTest: is directory'''
         dir_path = '/TestCacheManager.test_is_dir'
@@ -291,7 +280,6 @@ class IsDir(CacheManagerModuleTest):
         self.assertTrue(self.sut.is_dir(dir_path))
 
 class ListDir(CacheManagerModuleTest):
-    @logger_tm
     def test_list_dir(self):
         '''CacheManagerModuleTest: list directories'''
         dir_path = "/TestCacheManager.test_list_dir"
@@ -332,31 +320,117 @@ class ListDir(CacheManagerModuleTest):
 
 
 class Getattr(CacheManagerModuleTest):
-    @logger_tm
     def test(self):
         self.sut.get_attributes('.')
 
 class CacheFsModuleTest(ModuleTestCase):
 
     def __init__(self, *args, **kw):
+        try:
+            cache_via_memfs = kw['cache_via_memfs']
+            del kw['cache_via_memfs']
+            source_via_memfs = kw['source_via_memfs']
+            del kw['source_via_memfs']
+        except:
+            cache_via_memfs = False
+            source_via_memfs = False
+
         ModuleTestCase.__init__(self, *args, **kw)
         self.cfg = TestHelper.get_cfg()
-        self.tag = 0 # used for reboot testcases 
+        self.tag = 0 # used for testcases with reboot scenario
+        self.cache_memfs = cache_via_memfs
+        self.source_memfs = source_via_memfs
+        if self.cache_memfs:
+            self.cache_memfs_inport = None # must be initialized after port creation in test suite
+            self.cache_memfs_mounter = None
+
+        if self.source_memfs:
+            self.source_memfs_inport = None # must be initialized after port creation in test suite
+            self.source_memfs_mounter = None
+
+    def setUpImpl(self):
+        cfg = self.cfg 
+        mountpoint = cfg.cache_fs.cache_fs_mountpoint
+        self.assertTrue(not os.path.ismount(mountpoint), msg=mountpoint)
+        if not os.path.exists(mountpoint):
+            os.makedirs(mountpoint)
+
+        self.prepareSource()
+        self.precondition()
+        self.prepareCache()
+
+        self.mount_cachefs();
+
+    def tearDownImpl(self):
+        self.cachefs_mounter.unmount()
+
+    def cleanupWorkspaceImpl(self):
+        self.cleanupCache()
+        self.cleanupSource() # TODO: consider method reordering
+        #TestHelper.remove_source_dir(self.cfg.cache_manager)
 
     def precondition(self):
         pass
 
+    def prepareCache(self):
+        os.makedirs(self.cfg.cache_manager.cache_root_dir)
+        if self.cache_memfs:
+            self.mount_cache()
+
+    def prepareSource(self):
+        #TestHelper.create_source_dir(self.cfg.cache_manager)
+        if self.source_memfs:
+            self.mount_source()
+
+    def cleanupCache(self):
+        if self.cache_memfs:
+            self.cache_memfs_mounter.unmount()
+        # add some safety checks
+        assert(self.cfg.cache_manager.cache_root_dir)
+        shutil.rmtree(self.cfg.cache_manager.cache_root_dir)
+
+    def cleanupSource(self):
+        if self.source_memfs:
+            self.source_memfs_mounter.unmount()
+        assert(self.cfg.cache_manager.source_dir)
+        shutil.rmtree(self.cfg.cache_manager.source_dir)
+
+
     def mount_cache(self):
+        self._mount_memfs(
+                self.cfg.cache_manager.cache_root_dir,
+                os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_Cache_" + self.__class__.__name__ + str(self.tag)),
+                os.path.join(self.cfg.ut_tests_root, "Cache" + self.__class__.__name__ + str(self.tag) + '.sock'),
+                'cache')
+
+    def mount_source(self):
+        self._mount_memfs(
+                self.cfg.cache_manager.source_dir,
+                os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_Source_" + self.__class__.__name__ + str(self.tag)),
+                os.path.join(self.cfg.ut_tests_root, "Source" + self.__class__.__name__ + str(self.tag) + '.sock'),
+                'source')
+
+
+    def _mount_memfs(self, mountpoint, unixAddr, logpath, flavour):
+        # prepare communication port
+        self.cache_memfs_inport = InPort(unixAddr)
+        self.cache_memfs_inport.listen()
+
+        # mount memfs
         cmdline_options = [
             os.path.join(config.getProjectRoot(), 'tests', 'mocks', 'memfs.py'),
-            self.cfg.cache_manager.cache_root_dir,
-            '--log={log_path}'.format(log_path=os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_" + self.__class__.__name__ + str(self.tag))),
+            mountpoint,
+            '--log={log_path}'.format(log_path=logpath),
+            '--commport={commport}'.format(commport=unixAddr),
             '-f' # foreground
         ]
 
-        os.makedirs(self.cfg.cache_manager.cache_root_dir)
-        self.memfs_mounter = mounter.FuseFsMounter(cmdline_options)
-        self.memfs_mounter.mount()
+        if flavour == 'cache':
+            self.cache_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
+            self.cache_memfs_mounter.mount()
+        if flavour == 'source':
+            self.source_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
+            self.source_memfs_mounter.mount()
 
     def mount_cachefs(self):
         cmdline_options = [
@@ -370,27 +444,6 @@ class CacheFsModuleTest(ModuleTestCase):
         ]
         self.cachefs_mounter = mounter.FuseFsMounter(cmdline_options)
         self.cachefs_mounter.mount()
-
-    def setUpImpl(self):
-        cfg = self.cfg 
-        mountpoint = cfg.cache_fs.cache_fs_mountpoint
-        self.assertTrue(not os.path.ismount(mountpoint), msg=mountpoint)
-        if not os.path.exists(mountpoint):
-            os.makedirs(mountpoint)
-        TestHelper.create_source_dir(cfg.cache_manager)
-        self.precondition()
-        self.mount_cache()
-        self.mount_cachefs();
-
-    def tearDownImpl(self):
-        self.cachefs_mounter.unmount()
-        self.memfs_mounter.unmount()
-
-    def cleanupWorkspaceImpl(self):
-        TestHelper.remove_source_dir(self.cfg.cache_manager)
-        # add some safety checks
-        assert(self.cfg.cache_manager.cache_root_dir)
-        shutil.rmtree(self.cfg.cache_manager.cache_root_dir)
 
 class TestDirectoriesOnly(CacheFsModuleTest):
 
@@ -406,7 +459,6 @@ class TestDirectoriesOnly(CacheFsModuleTest):
                                      os.sep.join([TestDirectoriesOnly.SUBDIR_2,
                                                   TestDirectoriesOnly.SUB_SUBDIR_2]))
 
-    @logger_tm
     def test(self):
         '''App test: directories'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
@@ -449,7 +501,6 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
         TestHelper.create_source_dir(cfg, cls.SUBDIR_1)
         TestHelper.create_source_file(cfg, cls.FILE_2_SUBPATH, cls.FILE_2_CONTENT)
 
-    @logger_tm
     def test(self):
         '''App test: Check directories and files'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
@@ -469,22 +520,6 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
         read_content = file.read()
         file.close()
         self.assertEqual(cls.FILE_1_CONTENT, read_content)
-        '''
-        dir_path = os.sep.join([mountpoint, dirs[0]])
-
-        def check_file():
-            path, dirs, files = os.walk(dir_path).next()
-            self.assertEqual(1, len(files))
-            self.assertEqual(cls.FILE_2, files[0])
-            file2_path = os.sep.join([mountpoint, cls.SUBDIR_1, cls.FILE_2])
-            os.path.isfile(file2_path)
-            self.assertEqual(cls.FILE_2_CONTENT, open(file2_path).read())
-
-        check_file()
-        TestHelper.remove_source_file(self.cfg.cache_manager, cls.FILE_2_SUBPATH)
-        check_file() # after removing file remote it shall remain in cache
-                     # contextual way of checking if cache is really working
-        '''
 
 class RelativePaths(CacheFsModuleTest):
 
@@ -512,7 +547,6 @@ class RelativePaths(CacheFsModuleTest):
         TestHelper.create_source_dir(cfg, cls.SUBDIR_3)
         TestHelper.create_source_file(cfg, cls.FILE_3, cls.FILE_CONTENT_3)
 
-    @logger_tm
     def test(self):
         '''App test: Relative paths'''
 
@@ -601,7 +635,6 @@ class SymbolicLinks(CacheFsModuleTest):
             ln -s ../../../i/f/g/2.txt e/f/g/link_to_e
             ''')
 
-    @logger_tm
     def test(self):
         '''App test: Symbolic links'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
@@ -669,7 +702,6 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
         self.tag += 1 # for another log creation
         self.mount_cachefs()
 
-    @logger_tm
     def precondition(self):
         self._test.precondition()
 
@@ -683,7 +715,6 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
         CacheFsModuleTest.tearDownImpl(self)
         '''
 
-    @logger_tm
     def test(self):
         cachefs.DEBUG("Test Setup")
         #self._test.setUp()
@@ -702,32 +733,37 @@ class TestDirectoriesOnlyAfterReboot(CacheFsModuleTestAfterReboot):
     def __init__(self, *args, **kw):
         CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
         tc = TestDirectoriesOnly(*args, **kw)
-        self.initialize(tc);
+        self.initialize(tc)
 
 class TestDirectoriesAndFilesAfterReboot(CacheFsModuleTestAfterReboot):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
         tc = TestDirectoriesAndFiles(*args, **kw)
-        self.initialize(tc);
+        self.initialize(tc)
 
 class TestRelativePathsAfterReboot(CacheFsModuleTestAfterReboot):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
         tc = RelativePaths(*args, **kw)
-        self.initialize(tc);
+        self.initialize(tc)
 
 class TestGetattrFsAfterReboot(CacheFsModuleTestAfterReboot):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
         tc = GetattrFs(*args, **kw)
-        self.initialize(tc);
+        self.initialize(tc)
 
 class TestSymbolicLinksAfterReboot(CacheFsModuleTestAfterReboot):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
         tc = SymbolicLinks(*args, **kw)
-        self.initialize(tc);
+        self.initialize(tc)
+
+class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
+
+    def __init__(self, *args, **kw):
+        TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)

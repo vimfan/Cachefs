@@ -35,16 +35,17 @@ class FuseFsMounter(object):
 
         curr_attempt = 0
         interval = 0.01
-        num_of_attemps = 1 / interval
+        num_of_attemps = 10 / interval
+        devnull = open(os.devnull) # to disable warnings
         while os.path.ismount(mountpoint) and curr_attempt < num_of_attemps:
             logging.info("Calling fusermount -u")
             try:
-                subprocess.check_call([self._cfg.cache_fs.fusermount_bin, '-u', mountpoint])
+                subprocess.check_call([self._cfg.cache_fs.fusermount_bin, '-u', mountpoint], stderr=devnull)
             except subprocess.CalledProcessError, e:
-                time.sleep(0.01)
+                time.sleep(0.1)
                 curr_attempt += 1
         if curr_attempt == num_of_attemps:
-            print("Didn't manage to unmount filesystem")
+            print("Didn't manage to unmount filesystem after 10s, and {num_attempts}".format(num_attempts=curr_attempt))
 
 
     def _wait_for_mount(self):
