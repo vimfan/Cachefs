@@ -375,12 +375,12 @@ class CacheFsModuleTest(ModuleTestCase):
     def prepareCache(self):
         os.makedirs(self.cfg.cache_manager.cache_root_dir)
         if self.cache_memfs:
-            self.mount_cache()
+            self._mount_cache()
 
     def prepareSource(self):
         #TestHelper.create_source_dir(self.cfg.cache_manager)
         if self.source_memfs:
-            self.mount_source()
+            self._mount_source()
 
     def cleanupCache(self):
         if self.cache_memfs:
@@ -395,28 +395,37 @@ class CacheFsModuleTest(ModuleTestCase):
         assert(self.cfg.cache_manager.source_dir)
         shutil.rmtree(self.cfg.cache_manager.source_dir)
 
+    def _mount_cache(self):
 
-    def mount_cache(self):
-        self._mount_memfs(
-                self.cfg.cache_manager.cache_root_dir,
-                os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_Cache_" + self.__class__.__name__ + str(self.tag)),
-                os.path.join(self.cfg.ut_tests_root, "Cache" + self.__class__.__name__ + str(self.tag) + '.sock'),
-                'cache')
+        print("Mounting Memfs for cache")
 
-    def mount_source(self):
-        self._mount_memfs(
-                self.cfg.cache_manager.source_dir,
-                os.path.join(self.cfg.ut_tests_root, "LOG_MEMFS_Source_" + self.__class__.__name__ + str(self.tag)),
-                os.path.join(self.cfg.ut_tests_root, "Source" + self.__class__.__name__ + str(self.tag) + '.sock'),
-                'source')
+        mountId = 'cache'
+        logpath = self._buildMemfsLogPath(mountId)
+        unixAddr = self._buildMemfsUnixAddress(mountId)
 
-
-    def _mount_memfs(self, mountpoint, unixAddr, logpath, flavour):
-        # prepare communication port
         self.cache_memfs_inport = InPort(unixAddr)
         self.cache_memfs_inport.listen()
 
-        # mount memfs
+        cmdline_options = self._buildCmdLineOptions(self.cfg.cache_manager.cache_root_dir, logpath, unixAddr)
+        self.cache_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
+        self.cache_memfs_mounter.mount()
+
+    def _mount_source(self):
+
+        print("Mounting Memfs for source")
+
+        mountId = 'source'
+        logpath = self._buildMemfsLogPath(mountId)
+        unixAddr = self._buildMemfsUnixAddress(mountId)
+
+        self.source_memfs_inport = InPort(unixAddr)
+        self.source_memfs_inport.listen()
+
+        cmdline_options = self._buildCmdLineOptions(self.cfg.cache_manager.source_dir, logpath, unixAddr)
+        self.source_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
+        self.source_memfs_mounter.mount()
+
+    def _buildCmdLineOptions(self, mountpoint, logpath, unixAddr):
         cmdline_options = [
             os.path.join(config.getProjectRoot(), 'tests', 'mocks', 'memfs.py'),
             mountpoint,
@@ -424,13 +433,15 @@ class CacheFsModuleTest(ModuleTestCase):
             '--commport={commport}'.format(commport=unixAddr),
             '-f' # foreground
         ]
+        return cmdline_options
 
-        if flavour == 'cache':
-            self.cache_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
-            self.cache_memfs_mounter.mount()
-        if flavour == 'source':
-            self.source_memfs_mounter = mounter.FuseFsMounter(cmdline_options)
-            self.source_memfs_mounter.mount()
+    def _buildMemfsLogPath(self, label):
+        filename = ''.join(["LOG_MEMFS_", label, "_", self.__class__.__name__, str(self.tag), ".txt"])
+        return os.path.join(self.cfg.ut_tests_root, filename)
+
+    def _buildMemfsUnixAddress(self, label):
+        filename = ''.join([label.capitalize(), self.__class__.__name__, str(self.tag), '.sock'])
+        return os.path.join(self.cfg.ut_tests_root, filename)
 
     def mount_cachefs(self):
         cmdline_options = [

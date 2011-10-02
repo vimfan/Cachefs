@@ -10,23 +10,30 @@ import StringIO
 
 class OutPort(object):
 
+    class ConnectionError(Exception):
+        pass
+
     def __init__(self, unixPort):
-        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        while True:
-            try:
-                self.socket.connect(unixPort)
-                break
-            except:
-                time.sleep(0.05)
+        self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.__unixPort = unixPort
 
     def __del__(self):
-        self.socket.close()
+        self.__socket.close()
+
+    def connect(self):
+        for i in range(50):
+            try:
+                self.__socket.connect(self.__unixPort)
+                return
+            except:
+                time.sleep(0.05)
+        raise OutPort.ConnectionError() 
 
     def send(self, event):
         try:
             pickledEvent = pickle.dumps(event)
             # sizeOfEvent in 4 bytes, then SerializedEvent
-            self.socket.send(''.join(['%04d' % len(pickledEvent), pickledEvent]))
+            self.__socket.send(''.join(['%04d' % len(pickledEvent), pickledEvent]))
         except Exception, e: # FIXME
             print(str(e))
 
@@ -37,12 +44,12 @@ class InPort(object):
 
     def __init__(self, unixPort):
         self.eventQueue = Queue.Queue()
-        self.unixPort = unixPort
-        self.server = InPort.StreamServer(self.eventQueue, self.unixPort)
+        self.__unixPort = unixPort
+        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
 
     def __del__(self):
         self.server.shutdown()
-        os.remove(self.unixPort)
+        os.remove(self.__unixPort)
 
     def listen(self):
         # Start a thread with the server -- that thread will then start one
@@ -86,13 +93,17 @@ class InPort(object):
                 except Exception, e: # FIXME
                     print(str(e))
 
-class Port(OutPort, InPort):
+class Port(InPort, OutPort):
 
     def __init__(self, outPort, inPort):
-        OutPort.__init__(self, outPort)
         InPort.__init__(self, inPort)
+        OutPort.__init__(self, outPort)
 
     def __del__(self):
-        InPort.__del__(self)
         OutPort.__del__(self)
+        InPort.__del__(self)
+
+    def initialize(self):
+        self.listen()
+        self.connect()
 

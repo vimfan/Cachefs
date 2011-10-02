@@ -28,10 +28,15 @@ class OutPortTest(unittest.TestCase):
 
     def test_outPort(self):
         eventToSend = ['foo']
+
         server = threading.Thread(target=OutPortTest.serverHelper, args=(self, pickle.dumps(eventToSend)))
+        server.setDaemon(True)
         server.start()
+
         outPort = OutPort(OutPortTest.UNIX_SOCKET_ADDR)
+        outPort.connect()
         outPort.send(eventToSend)
+
         server.join()
 
     def tearDown(self):
@@ -49,6 +54,7 @@ class InPortTest(unittest.TestCase):
         inPort.listen()
 
         outPort = OutPort(InPortTest.UNIX_SOCKET_ADDR)
+        outPort.connect()
 
         eventsToSent = ['one', 'two', 3, 4.0, u'five']
         for event in eventsToSent:
@@ -63,6 +69,7 @@ class InPortTest(unittest.TestCase):
         inPort.listen()
 
         outPort = OutPort(InPortTest.UNIX_SOCKET_ADDR)
+        outPort.connect()
 
         eventsToSent = range(1000)
         for event in eventsToSent:
@@ -89,8 +96,9 @@ class PortTest(unittest.TestCase):
         inOutPort = Port(PortTest.UNIX_FIRST_ADDR, PortTest.UNIX_SECOND_ADDR)
         outPort = OutPort(PortTest.UNIX_SECOND_ADDR)
 
-        inOutPort.listen()
+        inOutPort.initialize()
         inPort.listen()
+        outPort.connect()
 
         event = 'foo'
         outPort.send(event)

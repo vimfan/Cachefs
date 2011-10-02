@@ -954,6 +954,7 @@ def main():
     logging.basicConfig(filename=str(options.log_path), level=logging.INFO, filemode='w')
 
     g_outPort = commport.OutPort(options.communication_port)
+    g_outPort.connect()
 
     try:
         server.main()

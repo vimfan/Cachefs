@@ -6,7 +6,6 @@ import signal
 import stat
 import subprocess
 import sys
-import time
 import datetime
 import calendar
 import errno
@@ -19,6 +18,13 @@ import loclogger
 from loclogger import DEBUG, INFO, ERROR, method_logger
 
 import config as config_canonical
+
+try:
+    import mocks.time_mock # for module tests, file available in tests directory
+    time = mocks.time_mock.ModuleInterface()
+    time.initialize()
+except:
+    import time
 
 
 # FUSE version at the time of writing. Be compatible with this version.

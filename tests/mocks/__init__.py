@@ -1,1 +1,1 @@
-__all__ = ['commport']
+__all__ = ['commport', 'time_mock']
