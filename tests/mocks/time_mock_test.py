@@ -9,15 +9,16 @@ class TimeTest(unittest.TestCase):
     UNIX_ADDR_1 = 'TimeTest1.sock'
     UNIX_ADDR_2 = 'TimeTest2.sock'
 
-    def timeControllerLoop(self, timeController):
+    @staticmethod
+    def timeControllerLoop(timeController):
         timeController.initialize()
         timeController.loop()
 
     def test_time(self):
         timeController = time_mock.TimeController(TimeTest.UNIX_ADDR_1, TimeTest.UNIX_ADDR_2)
 
-        server = threading.Thread(target=TimeTest.timeControllerLoop, args=(self, timeController))
-        server.setDaemon(True)
+        server = threading.Thread(target=TimeTest.timeControllerLoop, args=(timeController,))
+        server.setDaemon(False)
         server.start()
 
         timeMock = time_mock.TimeMock(TimeTest.UNIX_ADDR_2, TimeTest.UNIX_ADDR_1)
@@ -28,20 +29,21 @@ class TimeTest(unittest.TestCase):
             timeController.timeReturn = value
             self.assertEqual(value, timeMock.time())
 
-        timeController.finished = True
+        timeController.finalize()
         server.join()
 
+    '''
     def test_timeModuleTest(self):
-        iface = time_mock.ModuleInterface()
-        iface.initialize()
+        iface = time_mock.ModuleInterface() 
+        with iface:
+            iface.initialize()
 
-        timeController = iface.timeController
+            timeController = iface.timeController
 
-        timeValue = 9.9
-        timeController.timeReturn = timeValue
-        self.assertEqual(timeValue, iface.time())
+            timeValue = 9.9
+            timeController.timeReturn = timeValue
+            self.assertEqual(timeValue, iface.time())
 
-        timeController.finished = True
+            timeController.finished = True
+    '''
 
-    def test_(self):
-        pass

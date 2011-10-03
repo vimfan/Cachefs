@@ -30,7 +30,7 @@ class OutPortTest(unittest.TestCase):
         eventToSend = ['foo']
 
         server = threading.Thread(target=OutPortTest.serverHelper, args=(self, pickle.dumps(eventToSend)))
-        server.setDaemon(True)
+        server.setDaemon(False)
         server.start()
 
         outPort = OutPort(OutPortTest.UNIX_SOCKET_ADDR)

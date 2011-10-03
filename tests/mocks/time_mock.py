@@ -13,6 +13,9 @@ class TimeController(object):
     def initialize(self):
         self._inOutPort.initialize()
 
+    def finalize(self):
+        self.finished = True
+
     def handle(self, event):
         args = event['args']
         kw = event['kw']
@@ -66,12 +69,20 @@ class ModuleInterface(object):
         self.timeMock = TimeMock(port2, port1)
         self.server = None
 
-    def runController(self):
-        self.timeController.initialize()
-        self.timeController.loop()
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_value, tback):
+        self.timeController.finalize()
+
+    @staticmethod
+    def runController(timeController):
+        timeController.initialize()
+        timeController.loop()
 
     def initialize(self):
-        self.server = threading.Thread(target=ModuleInterface.runController, args=(self,))
+        self.server = threading.Thread(target=ModuleInterface.runController, args=(self.timeController,))
+        self.server.setDaemon(False)
         self.server.start()
 
         self.timeMock.initialize()

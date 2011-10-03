@@ -778,3 +778,16 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
 
     def __init__(self, *args, **kw):
         TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
+
+'''
+class TestWithMockTimer(CacheFsModuleTest):
+
+    def mount_cachefs(self):
+        os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
+                   os.path.join(config.getProjectRoot(), 'mocks'))
+
+        CacheFsModuleTest.mount_cachefs(self)
+
+    def test(self):
+        os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
+'''
