@@ -5,8 +5,8 @@ import threading
 
 class TimeController(object):
     '''Object of this class is used by test suite to set current time'''
-    def __init__(self, unixAddr1, unixAddr2):
-        self._inOutPort = Port(unixAddr1, unixAddr2)
+    def __init__(self, outUnixAddr, inUnixAddr):
+        self._inOutPort = Port(outUnixAddr, inUnixAddr)
         self.finished = False
         self.timeReturn = 17
 
@@ -17,16 +17,21 @@ class TimeController(object):
         self.finished = True
 
     def dispose(self):
+	print("TimeController::dispose()" + `self._inOutPort`)
         self._inOutPort.dispose()
 
     def handle(self, event):
+        print("TimeController::Handle()")
         args = event['args']
         kw = event['kw']
         method = event['method']
+        print("TimeController::Handle2()")
         try:
             ret = getattr(self, method)(*args, **kw)
+            print("ret1: " + str(ret))
         except Exception, e:
             ret = getattr(time, method)(*args, **kw)
+            print("ret2: " + str(ret))
 
         return self._inOutPort.send(ret)
 
@@ -34,6 +39,7 @@ class TimeController(object):
         return self.timeReturn
 
     def loop(self):
+        print("TimeController::loop()")
         while not self.finished:
             try:
                 event = self._inOutPort.receive(0.001)
@@ -43,8 +49,8 @@ class TimeController(object):
 
 class TimeMock(object):
     '''Object of this class encapsulates original time module interface'''
-    def __init__(self, unixAddr1, unixAddr2):
-        self._inOutPort = Port(unixAddr1, unixAddr2)
+    def __init__(self, outUnixAddr, inUnixAddr):
+        self._inOutPort = Port(outUnixAddr, inUnixAddr)
 
     def initialize(self):
         self._inOutPort.initialize()
@@ -65,14 +71,14 @@ class TimeMock(object):
 
 class ModuleInterface(object):
 
-    TIMER1_PORT_ADDR = 'TimeController.sock'
-    TIMER2_PORT_ADDR = 'TimeMock.sock'
+    TIME_CONTROLLER_PORT_ADDR = 'TimeController.sock'
+    TIME_MOCK_PORT_ADDR = 'TimeMock.sock'
 
     def __init__(self):
-        port1 = ModuleInterface.TIMER1_PORT_ADDR
-        port2 = ModuleInterface.TIMER2_PORT_ADDR
-        self.timeController = TimeController(port1, port2)
-        self.timeMock = TimeMock(port2, port1)
+        controllerPort = ModuleInterface.TIME_CONTROLLER_PORT_ADDR
+        mockPort = ModuleInterface.TIME_MOCK_PORT_ADDR
+        self.timeController = TimeController(outUnixAddr=mockPort, inUnixAddr=controllerPort)
+        self.timeMock = TimeMock(outUnixAddr=controllerPort, inUnixAddr=mockPort)
         self.server = None
 
     def __enter__(self):
@@ -83,24 +89,20 @@ class ModuleInterface(object):
 
     @staticmethod
     def runController(timeController):
-        print("runController")
         timeController.initialize()
-        print("initialize()")
         timeController.loop()
 
     def getController(self):
-        print("getController")
         self.server = threading.Thread(target=ModuleInterface.runController, args=(self.timeController,))
-        print("gowno")
         self.server.setDaemon(False)
-        print("gowno2")
         self.server.start()
-        print("gowno3")
         return self.timeController
 
     def initialize(self):
         self.timeMock.initialize()
 
     def time(self):
-        return self.timeMock.time()
+        t = self.timeMock.time()
+        print("Time() gonna return " + str(t))
+        return t
 

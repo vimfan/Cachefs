@@ -877,28 +877,37 @@ def main():
         print "\n===================================\nError: {error} \n===================================\n".format(error = str(e.msg))
         server.parser.print_help()
 
-if __name__ == '__main__':
+if __name__ == '__main__': 
+    time_stubbed = False
     try:
         # testing environment with mocked time module
-
         import mocks.time_mock # file available in tests directory
         time = mocks.time_mock.ModuleInterface()
-        time.initialize()
-        print("MAIN")
-        main()
-        time.dispose()
+	time_stubbed = True
 
-    except:
-        
+    except Exception, e:
         # standard environment
         import time as time_module
         time = time_module
+	time_stubbed = False
+
+    print("Time stubbed: " + str(time_stubbed))
+
+    try:
+        if time_stubbed:
+	    print("timeMock::initialize()")
+            time.timeMock.initialize()
+
         main()
+
+        if time_stubbed:
+            print("timeMock::dispose()")
+            time.timeMock.dispose()
+    except Exception, e:
+	print(str(e))
 
     INFO("File system unmounted")
 else:
     print("Not main")
     import time as time_module
     time = time_module
-
-

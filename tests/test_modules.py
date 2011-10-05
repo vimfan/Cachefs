@@ -787,15 +787,21 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
 class TestWithMockTimer(CacheFsModuleTest):
 
     def mount_cachefs(self):
+        timeModule = mocks.time_mock.ModuleInterface()
+        self.timeController = timeModule.getController()
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
         CacheFsModuleTest.mount_cachefs(self)
 
-    def test(self):
-        timeModule = mocks.time_mock.ModuleInterface()
-        timeController = timeModule.getController()
+    def tearDownImpl(self):
+
+        CacheFsModuleTest.tearDownImpl(self)
+
         os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
+        self.timeController.finalize()
         time.sleep(1)
-        timeController.finalize()
-        timeController.dispose()
+        self.timeController.dispose()
+
+    def test(self):
+	pass
 
