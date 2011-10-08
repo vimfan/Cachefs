@@ -62,15 +62,14 @@ class TimeMock(object):
         self._inOutPort.dispose()
 
     def __getattr__(self, item):
-        try:
-            return getattr(self, item)
-        except Exception, e:
+        if hasattr(time, item):
             def rpcWrapper(*args, **kw):
                 operation = item
-                self._inOutPort.send({'method' : 'time', 'args' : [], 'kw' : {}})
+                self._inOutPort.send({'method' : 'time', 'args' : args, 'kw' : kw})
                 ret = self._inOutPort.receive(1.0)
                 return ret
             return rpcWrapper
+        return getattr(self, item)
 
 class ModuleInterface(object):
 
@@ -84,12 +83,6 @@ class ModuleInterface(object):
         self.timeMock = TimeMock(outUnixAddr=controllerPort, inUnixAddr=mockPort)
         self.server = None
 
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_value, tback):
-        self.timeController.finalize()
-
     @staticmethod
     def _runController(timeController):
         timeController.initialize()
@@ -101,10 +94,7 @@ class ModuleInterface(object):
         self.server.start()
         return self.timeController
 
-    def initialize(self):
-        self.timeMock.initialize()
-
-    def time(self):
-        t = self.timeMock.time()
-        return t
-
+    def __getattr__(self, item):
+        if hasattr(self.timeMock, item):
+            return getattr(self.timeMock, item)
+        return getattr(self, item)
