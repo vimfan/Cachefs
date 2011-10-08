@@ -17,7 +17,7 @@ class TimeController(object):
         self.finished = True
 
     def dispose(self):
-	print("TimeController::dispose()" + `self._inOutPort`)
+        print("TimeController::dispose()" + `self._inOutPort`)
         self._inOutPort.dispose()
 
     def handle(self, event):
@@ -42,10 +42,13 @@ class TimeController(object):
         print("TimeController::loop()")
         while not self.finished:
             try:
-                event = self._inOutPort.receive(0.001)
+                event = self._inOutPort.receive(0.1)
+                print("Try Handle")
                 self.handle(event)
             except:
+                print("Waiting...")
                 pass
+        print("TimeController::loop() end")
 
 class TimeMock(object):
     '''Object of this class encapsulates original time module interface'''
@@ -88,12 +91,12 @@ class ModuleInterface(object):
         self.timeController.finalize()
 
     @staticmethod
-    def runController(timeController):
+    def _runController(timeController):
         timeController.initialize()
         timeController.loop()
 
     def getController(self):
-        self.server = threading.Thread(target=ModuleInterface.runController, args=(self.timeController,))
+        self.server = threading.Thread(target=ModuleInterface._runController, args=(self.timeController,))
         self.server.setDaemon(False)
         self.server.start()
         return self.timeController
@@ -103,6 +106,5 @@ class ModuleInterface(object):
 
     def time(self):
         t = self.timeMock.time()
-        print("Time() gonna return " + str(t))
         return t
 

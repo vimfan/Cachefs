@@ -21,7 +21,6 @@ class OutPort(object):
         self.__socket.close()
 
     def connect(self):
-	print(`self` + "::connect() " + self.__unixPort)
         for i in range(50):
             try:
                 self.__socket.connect(self.__unixPort)
@@ -49,7 +48,6 @@ class InPort(object):
         self.server = None 
 
     def listen(self):
-	print(`self` + "::listen() " + self.__unixPort)
         self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
         # Start a thread with the server -- that thread will then start one
         # more thread for each request
@@ -59,7 +57,6 @@ class InPort(object):
         serverThread.start()
 
     def dispose(self):
-	print("Port dispose" + `self` + self.__unixPort)
         self.server.shutdown()
         os.remove(self.__unixPort)
 

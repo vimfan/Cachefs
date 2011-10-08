@@ -14,6 +14,7 @@ import logging
 
 import unittest
 import mox
+import pdb
 
 import fuse
 import config
@@ -787,21 +788,25 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
 class TestWithMockTimer(CacheFsModuleTest):
 
     def mount_cachefs(self):
-        timeModule = mocks.time_mock.ModuleInterface()
-        self.timeController = timeModule.getController()
+        self.timeModule = mocks.time_mock.ModuleInterface()
+        self.timeController = self.timeModule.getController()
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
         CacheFsModuleTest.mount_cachefs(self)
 
     def tearDownImpl(self):
-
         CacheFsModuleTest.tearDownImpl(self)
-
+        print("after tearDownImpl()")
         os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
-        self.timeController.finalize()
+        print("after os.remove")
         time.sleep(1)
+        self.timeController.finalize()
+        print("timeController.finalize()")
         self.timeController.dispose()
+        print("timeController.dispose()")
+        self.timeModule.server.join()
+        print("after join")
 
     def test(self):
-	pass
+        pass
 

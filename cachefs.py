@@ -883,31 +883,30 @@ if __name__ == '__main__':
         # testing environment with mocked time module
         import mocks.time_mock # file available in tests directory
         time = mocks.time_mock.ModuleInterface()
-	time_stubbed = True
+        time_stubbed = True
 
     except Exception, e:
         # standard environment
         import time as time_module
         time = time_module
-	time_stubbed = False
+        time_stubbed = False
 
-    print("Time stubbed: " + str(time_stubbed))
-
+     #DEBUG("time stubbed: " + str(time_stubbed))
     try:
         if time_stubbed:
-	    print("timeMock::initialize()")
+            #DEBUG("timeMock::initialize()")
             time.timeMock.initialize()
 
         main()
 
         if time_stubbed:
-            print("timeMock::dispose()")
+            #DEBUG("timeMock::dispose()")
             time.timeMock.dispose()
+            del time # nasty workaround, but it works - TODO: understand why
     except Exception, e:
-	print(str(e))
+        print(str(e))
 
     INFO("File system unmounted")
 else:
-    print("Not main")
     import time as time_module
     time = time_module
