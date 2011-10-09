@@ -50,7 +50,6 @@ class TestHelper:
             source_dir = os.sep.join([cfg.source_dir, path])
         else:
             source_dir = cfg.source_dir
-        print("source_dir: " + source_dir)
         os.makedirs(source_dir)
 
     @staticmethod
@@ -104,7 +103,6 @@ class ModuleTestCase(unittest.TestCase):
         if (os.path.lexists(testcase_current)):
             os.unlink(testcase_current)
         os.symlink(tc_wdir, testcase_current)
-        print(cfg.cache_manager.source_dir)
         TestHelper.create_source_dir(cfg.cache_manager)
 
         return self.setUpImpl()
@@ -220,25 +218,6 @@ class CacheFsUnitTest(unittest.TestCase):
         mox.Replay(cache_mgr_mock)
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
-
-    #def test_readlink_success(self):
-        #FILEPATH = '/File'
-        #CACHED_FILE_PATH = "/ABSOLUTE/PATH/TO/CACHED/FILE"
-
-        #cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        #cache_mgr_mock.get_path_to_file(FILEPATH).AndReturn(CACHED_FILE_PATH)
-        #mox.Replay(cache_mgr_mock)
-
-        #self.assertEqual(CACHED_FILE_PATH, self.sut.readlink(FILEPATH))
-
-    #def test_readlink_not_found(self):
-        #FILEPATH = '/File'
-
-        #cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        #cache_mgr_mock.get_path_to_file(FILEPATH).AndReturn(None)
-        #mox.Replay(cache_mgr_mock)
-
-        #self.assertEqual(-errno.ENOENT, self.sut.readlink(FILEPATH))
 
 class CacheManagerModuleTest(ModuleTestCase):
 
@@ -674,7 +653,6 @@ class SymbolicLinks(CacheFsModuleTest):
 
         full_path = os.sep.join([mountpoint, 'e/f/g/j'])
         self.assertTrue(os.path.exists(full_path))
-        self.assertTrue(os.path.islink(full_path))
 
         full_path = os.sep.join([mountpoint, 'e/f/g/j/2.txt'])
         self.assertTrue(os.path.exists(full_path))
@@ -722,7 +700,7 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
     def precondition(self):
         self._test.precondition()
 
-        '''
+    '''
     def cleanupWorkspace(self):
         self._test.cleanupWorkspace()
         CacheFsModuleTest.cleanupWorkspace(self)
@@ -730,7 +708,7 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
     def tearDownImpl(self):
         self._test.tearDownImpl()
         CacheFsModuleTest.tearDownImpl(self)
-        '''
+    '''
 
     def test(self):
         cachefs.DEBUG("Test Setup")
@@ -796,16 +774,15 @@ class TestWithMockTimer(CacheFsModuleTest):
 
     def tearDownImpl(self):
         CacheFsModuleTest.tearDownImpl(self)
-        print("after tearDownImpl()")
         os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
-        print("after os.remove")
-        time.sleep(1)
         self.timeController.finalize()
-        print("timeController.finalize()")
         self.timeController.dispose()
-        print("timeController.dispose()")
         self.timeModule.server.join()
-        print("after join")
+
+    def test(self):
+        pass
+
+class TestCacheAndSourceMocked(TestWithMockTimer):
 
     def test(self):
         pass

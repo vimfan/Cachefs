@@ -900,9 +900,7 @@ if __name__ == '__main__':
         main()
 
         if time_stubbed:
-            #DEBUG("timeMock::dispose()")
             time.timeMock.dispose()
-            del time # nasty workaround, but it works - TODO: understand why
     except Exception, e:
         print(str(e))
 

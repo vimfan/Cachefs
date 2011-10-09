@@ -53,7 +53,7 @@ class InPort(object):
         # more thread for each request
         serverThread = threading.Thread(target=self.server.serve_forever)
         # Exit the server thread when the main thread terminates
-        serverThread.setDaemon(False)
+        serverThread.setDaemon(True)
         serverThread.start()
 
     def dispose(self):

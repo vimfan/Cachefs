@@ -34,18 +34,6 @@ class TimeTest(unittest.TestCase):
         timeMock.dispose()
         timeController.dispose()
 
-    '''
-    def test_timeModuleTest(self):
-        iface = time_mock.ModuleInterface() 
-        with iface:
-            iface.initialize()
-
-            timeController = iface.timeController
-
-            timeValue = 9.9
-            timeController.timeReturn = timeValue
-            self.assertEqual(timeValue, iface.time())
-
-            timeController.finished = True
-    '''
+        del timeMock
+        del timeController
 
