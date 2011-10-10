@@ -19,9 +19,11 @@ class MemoryCache(object):
     def __init__(self):
         self._getattr = {}
         self._readlink = {}
+        self._stamps = set()
 
     def get_attributes(self, path):
-        DEBUG("MEMORY CACHED_FILE ATTRIBUTES: %s" % len(self._getattr))
+        if loclogger.debug:
+            DEBUG("MEMORY CACHED_FILE ATTRIBUTES: %s" % len(self._getattr))
         if self._getattr.has_key(path):
             entry = self._getattr[path]
             if entry.timestamp - time.time() > 60:
@@ -30,11 +32,14 @@ class MemoryCache(object):
         return None
 
     def read_link(self, path):
-        DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
+        if loclogger.debug:
+            DEBUG("MEMORY CACHED TARGET LINKS: %s" % len(self._readlink))
         if self._readlink.has_key(path):
             entry = self._readlink[path]
+            '''
             if entry.timestamp - time.time() > 60: # TODO: parametrize this
                 return None
+            '''
             return entry
         return None
 
@@ -43,3 +48,9 @@ class MemoryCache(object):
 
     def cache_link_target(self, path, target):
         self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
+
+    def has_stamp(self, path):
+        return path in self._stamps
+
+    def save_stamp(self, path):
+        self._stamps.add(path)

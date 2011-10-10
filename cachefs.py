@@ -16,6 +16,7 @@ import traceback
 import string
 import loclogger
 from loclogger import DEBUG, INFO, ERROR, method_logger
+#from memcache import MemoryCache
 
 import config as config_canonical
 
@@ -115,11 +116,13 @@ class CacheFs(fuse.Fuse):
 
     @method_logger
     def opendir(self, path):
+        if self.cache_mgr._has_init_stamp(path):
+            return None # success
         if not self.cache_mgr.exists(path):
             return -errno.ENOENT
         if not self.cache_mgr.is_dir(path):
             return -errno.ENOENT
-        return None # means success
+        return None # success
 
     @method_logger
     def readdir(self, path, offset = None, dh = None):
@@ -272,6 +275,7 @@ class MemoryCache(object):
     def __init__(self):
         self._attributes = {}
         self._readlink = {}
+        self._stamps = set()
 
     def get_attributes(self, path):
         if self._attributes.has_key(path):
@@ -299,8 +303,19 @@ class MemoryCache(object):
         if loclogger.debug:
             DEBUG(os.path.normpath(path))
 
+    @method_logger
     def cache_link_target(self, path, target):
         self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
+
+    @method_logger
+    def has_stamp(self, path):
+        if loclogger.debug:
+            DEBUG(self._stamps)
+        return path in self._stamps
+
+    @method_logger
+    def save_stamp(self, path):
+        self._stamps.add(path)
 
 class CacheManager(object):
 
@@ -555,6 +570,7 @@ class CacheManager(object):
             stamp = self.path_transformer.transform_filepath(path_to_cache)
             if not os.path.lexists(stamp):
                 os.symlink('#', stamp)
+                self.memcache.save_stamp(stamp)
             return
         else:
             ERROR("Don't know how to create cache stamp for '%s'" % path_to_cache)
@@ -562,6 +578,8 @@ class CacheManager(object):
                
     @method_logger
     def is_dir(self, rel_path):
+        if self._has_init_stamp(rel_path):
+            return True
         memstat = self.memcache.get_attributes(rel_path)
         if memstat:
             if memstat.stat:
@@ -579,6 +597,8 @@ class CacheManager(object):
 
     @method_logger
     def exists(self, rel_path):
+        if self._has_init_stamp(rel_path):
+            return True
         memstat = self.memcache.get_attributes(rel_path)
         if memstat:
             return memstat.stat <> None
@@ -594,7 +614,9 @@ class CacheManager(object):
 
     @method_logger
     def _create_dir_init_stamp(self, rel_dirpath):
-        os.symlink('.', self._get_init_stamp(rel_dirpath))
+        stamp_path = self._get_init_stamp(rel_dirpath)
+        os.symlink('.', stamp_path)
+        self.memcache.save_stamp(stamp_path)
 
     @method_logger
     def _remove_dir_init_stamp(self, rel_dirpath):
@@ -602,7 +624,15 @@ class CacheManager(object):
 
     @method_logger
     def _has_init_stamp(self, rel_dirpath):
-        return os.path.lexists(self._get_init_stamp(rel_dirpath))
+        init_stamp_path = self._get_init_stamp(rel_dirpath)
+        if self.memcache.has_stamp(init_stamp_path):
+            return True
+        else:
+            if os.path.lexists(init_stamp_path):
+                self.memcache.save_stamp(init_stamp_path)
+                return True
+            else:
+                return False
 
     def _get_init_stamp(self, rel_dirpath):
         return os.sep.join([self._cache_path(rel_dirpath), 
