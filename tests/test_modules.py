@@ -782,8 +782,42 @@ class TestWithMockTimer(CacheFsModuleTest):
     def test(self):
         pass
 
-class TestCacheAndSourceMocked(TestWithMockTimer):
+class TestCacheAndSourceMocked(CacheFsModuleTest):
+    '''Testcase with mocked: time, source directory, cache directory'''
+
+    def fetchAll(self, port):
+        ret = []
+        try:
+            while True:
+                msg = port.receive(0.01)
+                ret.append(msg)
+                #print(`port` + " receive: " + " " + str(msg))
+        except InPort.Timeout, e:
+            print("All message received from port, number: " + str(len(ret)))
+            pass
+        return ret
+
+    def precondition(self):
+        TestHelper.execute_source(self.cfg, '''
+            mkdir i
+            echo 'dummy content' >> i/2.txt
+            ln -s i/2.txt 2.txt
+            ''')
+
+
+    def __init__(self, *args, **kw):
+        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
     def test(self):
-        pass
+        self.fetchAll(self.source_memfs_inport)
+        cache_check = self.fetchAll(self.cache_memfs_inport)
 
+        cache_check = list(sorted(map(lambda x: x[1] + x[2], cache_check)))
+        print(cache_check)
+
+        cache_check_unique = list(sorted(set(cache_check)))
+
+        self.assertEqual(len(cache_check_unique), len(cache_check), 
+                "Memory cache not used in " + str(len(cache_check) - len(cache_check_unique)) + " cases"
+                + "\n\nIs: \n" + str(cache_check)
+                + "\n\nExpected: \n" + str(cache_check_unique))

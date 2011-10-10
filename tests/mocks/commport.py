@@ -47,6 +47,9 @@ class InPort(object):
         self.__unixPort = unixPort
         self.server = None 
 
+    def __repr__(self):
+        return "<InPort {port}>".format(port=os.path.basename(self.__unixPort))
+
     def listen(self):
         self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
         # Start a thread with the server -- that thread will then start one

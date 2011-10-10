@@ -21,17 +21,15 @@ class TimeController(object):
         self._inOutPort.dispose()
 
     def handle(self, event):
-        print("TimeController::Handle()")
         args = event['args']
         kw = event['kw']
         method = event['method']
-        print("TimeController::Handle2()")
         try:
             ret = getattr(self, method)(*args, **kw)
-            print("ret1: " + str(ret))
+            print("TimeMock::" + method + "(...) -> {ret}".format(ret=str(ret)))
         except Exception, e:
             ret = getattr(time, method)(*args, **kw)
-            print("ret2: " + str(ret))
+            print("time." + method + "(...) -> " + str(ret))
 
         return self._inOutPort.send(ret)
 

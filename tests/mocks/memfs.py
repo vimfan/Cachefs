@@ -271,7 +271,7 @@ def logEvent(f):
         operation = f.func_name
         params = [args[1:], kw]
         output = f(*args, **kw)
-        g_outPort.send([operation, str(params), str(output)])
+        g_outPort.send([time.clock(), operation, str(params), str(output)])
         return output
 
     return wrapper
