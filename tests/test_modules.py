@@ -194,6 +194,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
+        cache_mgr_mock._has_init_stamp(DIRPATH).AndReturn(False)
         cache_mgr_mock.exists(DIRPATH).AndReturn(True)
         cache_mgr_mock.is_dir(DIRPATH).AndReturn(True)
         mox.Replay(cache_mgr_mock)
@@ -204,6 +205,7 @@ class CacheFsUnitTest(unittest.TestCase):
         FILEPATH = '/FILE'
 
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
+        cache_mgr_mock._has_init_stamp(FILEPATH).AndReturn(False)
         cache_mgr_mock.exists(FILEPATH).AndReturn(True)
         cache_mgr_mock.is_dir(FILEPATH).AndReturn(False)
         mox.Replay(cache_mgr_mock)
@@ -214,6 +216,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
+        cache_mgr_mock._has_init_stamp(DIRPATH).AndReturn(False)
         cache_mgr_mock.exists(DIRPATH).AndReturn(False)
         mox.Replay(cache_mgr_mock)
 
