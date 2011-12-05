@@ -45,6 +45,19 @@ class TestHelper:
         return test_config.getConfig()
 
     @staticmethod
+    def fetch_all(port):
+        ret = []
+        try:
+            while True:
+                msg = port.receive(0.01)
+                ret.append(msg)
+        except InPort.Timeout, e:
+            print("All message received from port, number: " + str(len(ret)))
+            pass
+        return ret
+
+
+    @staticmethod
     def create_source_dir(cfg, path = ''):
         if path:
             source_dir = os.sep.join([cfg.source_dir, path])
@@ -826,39 +839,8 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
     def __init__(self, *args, **kw):
         TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
-class TestWithMockTimer(CacheFsModuleTest):
-
-    def mount_cachefs(self):
-        self.timeModule = mocks.time_mock.ModuleInterface()
-        self.timeController = self.timeModule.getController()
-        os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
-                   os.path.join(config.getProjectRoot(), 'mocks'))
-        CacheFsModuleTest.mount_cachefs(self)
-
-    def tearDownImpl(self):
-        CacheFsModuleTest.tearDownImpl(self)
-        os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
-        self.timeController.finalize()
-        self.timeController.dispose()
-        self.timeModule.server.join()
-
-    def test(self):
-        pass
-
-class TestCacheAndSourceMocked(CacheFsModuleTest):
+class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
     '''Testcase with mocked: time, source directory, cache directory'''
-
-    def _fetchAll(self, port):
-        ret = []
-        try:
-            while True:
-                msg = port.receive(0.01)
-                ret.append(msg)
-                #print(`port` + " receive: " + " " + str(msg))
-        except InPort.Timeout, e:
-            print("All message received from port, number: " + str(len(ret)))
-            pass
-        return ret
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -885,25 +867,40 @@ class TestCacheAndSourceMocked(CacheFsModuleTest):
             self._access("/i/2.txt", os.X_OK)
             self._listdir("/")
 
+        cacheableOperations()
+
+        TestHelper.fetch_all(self.source_memfs_inport)
+        TestHelper.fetch_all(self.cache_memfs_inport)
 
         cacheableOperations()
 
-        self._fetchAll(self.source_memfs_inport)
-        self._fetchAll(self.cache_memfs_inport)
-
-        '''
-        cache_check = map(lambda x: x[1] + x[2], cache_check)
-        cache_check = dict(zip(cache_check, map(lambda x: cache_check.count(x), cache_check)))
-
-        self.assertEqual([], filter(lambda x: x > 1, cache_check.values()), 
-                "Memory cache not used in some cases, number of repetead operations:\n" 
-                + str('\n'.join([str(x) for x in list(filter(lambda x: x[1] > 1, cache_check.items()))])))
-        '''
-
-        cacheableOperations()
-
-        source_check = self._fetchAll(self.source_memfs_inport)
+        source_check = TestHelper.fetch_all(self.source_memfs_inport)
         self.assertEqual([], source_check)
 
-        cache_check = self._fetchAll(self.cache_memfs_inport)
+        cache_check = TestHelper.fetch_all(self.cache_memfs_inport)
         self.assertEqual([], cache_check)
+
+
+class TestWithMockTimer(CacheFsModuleTest):
+
+    def __init__(self, *args, **kw):
+        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
+
+    def mount_cachefs(self):
+        self.timeModule = mocks.time_mock.ModuleInterface()
+        self.timeController = self.timeModule.getController()
+        os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
+                   os.path.join(config.getProjectRoot(), 'mocks'))
+        CacheFsModuleTest.mount_cachefs(self)
+
+    def tearDownImpl(self):
+        CacheFsModuleTest.tearDownImpl(self)
+        os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
+        self.timeController.finalize()
+        self.timeController.dispose()
+        self.timeModule.server.join()
+
+    def test(self):
+        pass
+
+
