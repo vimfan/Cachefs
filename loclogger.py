@@ -29,7 +29,8 @@ def initialize(logfile='logs/LOG'):
     if os.path.exists(logfile):
         os.remove(logfile)
 
-    logging.basicConfig(filename=logfile,level=logging.DEBUG,)
+    FORMAT="%(asctime)-15s %(message)s"
+    logging.basicConfig(filename=logfile,level=logging.DEBUG,format=FORMAT)
 
     __initialized = True
 
@@ -46,16 +47,19 @@ def method_logger(f):
             class_name = args[0].__class__.__name__
             func_name = f.func_name
             depth += 1
-            DEBUG("%s:%s {%s- %s.%s(args: %s, kw: %s)" %
-                          (f.func_code.co_filename,
+            offset = depth * "\t"
+            DEBUG("#%s:%s%s{%s- %s.%s(args: %s, kw: %s)" %
+                          (os.path.basename(f.func_code.co_filename),
                            f.func_code.co_firstlineno,
+                           offset,
                            depth,
                            class_name, func_name,
                            args[1:], kw))
             retval = f(*args, **kw)
-            DEBUG("%s:%s -%s} %s.%s(...) -> returns: %s(%r)" %
-                          (f.func_code.co_filename,
+            DEBUG("#%s:%s%s-%s} %s.%s(...) -> returns: %s(%r)" %
+                          (os.path.basename(f.func_code.co_filename),
                            f.func_code.co_firstlineno,
+                           offset,
                            depth,
                            class_name, func_name, type(retval), retval))
             depth -= 1

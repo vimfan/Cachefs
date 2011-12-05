@@ -260,6 +260,17 @@ class File(FsObject):
 
 class MemoryCache(object):
 
+    class TreeNode(object):
+
+        def __init__(self, parent=None):
+            self.parent = parent
+            self.children = {}
+            self.target = None
+            self.stat = None
+
+        def add_child(self, name):
+            self.children[name] = MemoryCache.TreeNode(self)
+
     class GetattrEntry:
 
         def __init__(self, st, stamp = None):
@@ -276,36 +287,52 @@ class MemoryCache(object):
         self._attributes = {}
         self._readlink = {}
         self._stamps = set()
+        self._root = MemoryCache.TreeNode()
 
+    @method_logger
     def get_attributes(self, path):
+        '''
         if self._attributes.has_key(path):
             entry = self._attributes[path]
-            if entry.timestamp - time.time() > 60:
-                return None
             return entry
+        '''
+        node = self._get_node(path)
+        if node:
+            if node.parent is None and not node.stat: # root
+                return None
+            return node
         else:
             if loclogger.debug:
                 DEBUG("NO CACHE ENTRY FOR %s" % path)
-        return None
+            return None
 
-    def read_link(self, path):
-        if self._readlink.has_key(path):
-            entry = self._readlink[path]
-            if entry.timestamp - time.time() > 60: # TODO: parametrize this
-                return None
-            return entry
-        return None
+    @method_logger
+    def list_dir(self, path):
+        node = self._get_node(path)
+        if node is None: 
+            return []
+        return list(sorted(node.children.keys()))
 
     @method_logger
     def cache_attributes(self, path, st = None):
         # FIXME: workaround - normpath
-        self._attributes[string.replace(path, '//', '/')] = MemoryCache.GetattrEntry(st, time.time())
+        #self._attributes[string.replace(path, '//', '/')] = MemoryCache.GetattrEntry(st, time.time())
+        DEBUG("caching attributes " + path)
+        node = self._create_node(path)
+        node.stat = st
         if loclogger.debug:
-            DEBUG(os.path.normpath(path))
+            DEBUG("Normalized path: " + string.replace(path, '//', '/'))
 
     @method_logger
     def cache_link_target(self, path, target):
         self._readlink[path] = MemoryCache.ReadlinkEntry(target, time.time())
+
+    @method_logger
+    def read_link(self, path):
+        if self._readlink.has_key(path):
+            entry = self._readlink[path]
+            return entry
+        return None
 
     @method_logger
     def has_stamp(self, path):
@@ -316,6 +343,36 @@ class MemoryCache(object):
     @method_logger
     def save_stamp(self, path):
         self._stamps.add(path)
+
+    def _split_path(self, path):
+        parts = list(filter(lambda x: not x is '', path.split(os.path.sep))) # /a//b///c became ['a', 'b', 'c']
+        return parts
+
+    def _get_node(self, path):
+        parts = self._split_path(path)
+        curr_node = self._root
+        for part in parts:
+            if not part in curr_node.children:
+                return None
+            else:
+                curr_node = curr_node.children[part]
+        return curr_node
+
+    def _create_node(self, path):
+        parts = self._split_path(path)
+        curr_node = self._root
+        for part in parts:
+            if not part in curr_node.children:
+                curr_node.children[part] = MemoryCache.TreeNode(curr_node)
+            curr_node = curr_node.children[part]
+        return curr_node
+
+    def _cache_attributes_impl(self, path, st = None):
+        node = self._get_node(path)
+        if not node:
+            node = self._create_node(path)
+        node.stat = st
+
 
 class CacheManager(object):
 
@@ -455,6 +512,8 @@ class CacheManager(object):
 
     @method_logger
     def list_dir(self, rel_path):
+        if self.memcache.has_stamp(self._get_init_stamp(rel_path)):
+            return self.memcache.list_dir(rel_path)
         path_to_cache = self._cache_path(rel_path)
         try:
             cache_walker = self._create_cached_dir_walker(path_to_cache)
@@ -467,21 +526,11 @@ class CacheManager(object):
     def get_attributes(self, relative_path):
         memstat = self.memcache.get_attributes(relative_path)
         if not memstat:
-            self.memcache.cache_attributes(relative_path, self._get_attributes(relative_path))
+            self.memcache.cache_attributes(relative_path, self._get_attributes_impl(relative_path))
             memstat = self.memcache.get_attributes(relative_path)
         return memstat.stat
 
-    def _get_attributes_for_cached_file(self, rel_path, path_to_cache):
-        st = os.lstat(path_to_cache)
-        if stat.S_ISDIR(st.st_mode):
-           if not self._has_init_stamp(rel_path):
-                try:
-                    self._cache_directory(rel_path)
-                except:
-                    ERROR("Cannot cache directory %s" % rel_path)
-        return st
-
-    def _get_attributes(self, relative_path):
+    def _get_attributes_impl(self, relative_path):
         path_to_cache = self._cache_path(relative_path)
         if os.path.lexists(path_to_cache):
 			return self._get_attributes_for_cached_file(relative_path, path_to_cache)
@@ -492,8 +541,7 @@ class CacheManager(object):
             if has_stamp:
                 transformed_filepath = self._cache_path(self.path_transformer.transform_filepath(relative_path))
                 transformed_dirpath = self._cache_path(self.path_transformer.transform_dirpath(relative_path))
-                if (os.path.lexists(transformed_filepath) 
-                        or os.path.lexists(transformed_dirpath)):
+                if os.path.lexists(transformed_filepath) or os.path.lexists(transformed_dirpath):
                     return os.lstat(path_to_source)
                 else:
                     return None
@@ -506,6 +554,16 @@ class CacheManager(object):
                     return st
                 else:
                    return None
+
+    def _get_attributes_for_cached_file(self, rel_path, path_to_cache):
+        st = os.lstat(path_to_cache)
+        if stat.S_ISDIR(st.st_mode):
+           if not self._has_init_stamp(rel_path):
+                try:
+                    self._cache_directory(rel_path)
+                except:
+                    ERROR("Cannot cache directory %s" % rel_path)
+        return st
 
     @method_logger
     def _cache_directory(self, rel_path):
@@ -628,11 +686,7 @@ class CacheManager(object):
         if self.memcache.has_stamp(init_stamp_path):
             return True
         else:
-            if os.path.lexists(init_stamp_path):
-                self.memcache.save_stamp(init_stamp_path)
-                return True
-            else:
-                return False
+            return os.path.lexists(init_stamp_path)
 
     def _get_init_stamp(self, rel_dirpath):
         return os.sep.join([self._cache_path(rel_dirpath), 
@@ -653,7 +707,6 @@ class CacheManager(object):
     def _create_dir_walker(self, rootpath, rel_path):
         return CacheManager.DirWalker(rootpath, rel_path, self.memcache)
 
-    @method_logger
     def _create_cached_dir_walker(self, path):
         return CacheManager.CachedDirWalker(path)
 

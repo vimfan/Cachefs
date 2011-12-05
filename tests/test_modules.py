@@ -222,6 +222,46 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
 
+    def test_memcache_get_attributes(self):
+        memcache = cachefs.MemoryCache()
+
+        root_path = "/"
+        root_stat = 54321
+        self.assertEqual(None, memcache.get_attributes(root_path))
+        memcache.cache_attributes(root_path, root_stat)
+        self.assertEqual(root_stat, memcache.get_attributes(root_path).stat)
+
+        some_stat = 12345
+        some_path = "/example/file"
+        self.assertEqual(None, memcache.get_attributes(some_path))
+        memcache.cache_attributes(some_path, some_stat)
+        self.assertEqual(some_stat, memcache.get_attributes(some_path).stat)
+
+    def test_memcache_cache_link_target(self):
+        memcache = cachefs.MemoryCache()
+        some_target = "target"
+        some_path = "/example/link"
+        self.assertEqual(None, memcache.read_link(some_path))
+        memcache.cache_link_target(some_path, some_target)
+        self.assertEqual(some_target, memcache.read_link(some_path).target)
+
+    def test_memcache_save_stamp(self):
+        memcache = cachefs.MemoryCache()
+        some_path = "/example/dir"
+        self.assertFalse(memcache.has_stamp(some_path))
+        memcache.save_stamp(some_path)
+        self.assertTrue(memcache.has_stamp(some_path))
+
+    def test_memcache_list_dir(self):
+        memcache = cachefs.MemoryCache()
+        memcache.cache_attributes('/', 1)
+        memcache.cache_attributes('/home', 2)
+        memcache.cache_attributes('/home/a', 3)
+        memcache.cache_attributes('/home/b', 4)
+
+        self.assertEqual(['home'], memcache.list_dir('/'))
+        self.assertEqual(['a', 'b'], memcache.list_dir('/home'))
+
 class CacheManagerModuleTest(ModuleTestCase):
 
     def setUpImpl(self):
@@ -315,10 +355,13 @@ class CacheFsModuleTest(ModuleTestCase):
         try:
             cache_via_memfs = kw['cache_via_memfs']
             del kw['cache_via_memfs']
+        except KeyError:
+            cache_via_memfs = False
+
+        try:
             source_via_memfs = kw['source_via_memfs']
             del kw['source_via_memfs']
-        except:
-            cache_via_memfs = False
+        except KeyError:
             source_via_memfs = False
 
         ModuleTestCase.__init__(self, *args, **kw)
@@ -382,6 +425,23 @@ class CacheFsModuleTest(ModuleTestCase):
             self.source_memfs_inport.dispose()
         assert(self.cfg.cache_manager.source_dir)
         shutil.rmtree(self.cfg.cache_manager.source_dir)
+
+    def _getstat(self, path):
+        return os.lstat(self._abspath(path))
+
+    def _listdir(self, path):
+        return os.listdir(self._abspath(path))
+
+
+    def _readlink(self, path):
+        return os.readlink(self._abspath(path))
+
+    def _access(self, path, mode):
+        return os.access(self._abspath(path), mode)
+
+    def _abspath(self, path):
+        return os.sep.join([self.cfg.cache_fs.cache_fs_mountpoint, path])
+
 
     def _mount_cache(self):
 
@@ -788,7 +848,7 @@ class TestWithMockTimer(CacheFsModuleTest):
 class TestCacheAndSourceMocked(CacheFsModuleTest):
     '''Testcase with mocked: time, source directory, cache directory'''
 
-    def fetchAll(self, port):
+    def _fetchAll(self, port):
         ret = []
         try:
             while True:
@@ -804,6 +864,7 @@ class TestCacheAndSourceMocked(CacheFsModuleTest):
         TestHelper.execute_source(self.cfg, '''
             mkdir i
             echo 'dummy content' >> i/2.txt
+            chmod ugo+rwx i/2.txt
             ln -s i/2.txt 2.txt
             ''')
 
@@ -812,20 +873,37 @@ class TestCacheAndSourceMocked(CacheFsModuleTest):
         CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
     def test(self):
-        self.fetchAll(self.source_memfs_inport)
-        cache_check = self.fetchAll(self.cache_memfs_inport)
 
+        def cacheableOperations():
+            self._access("/NON_EXISTING_FILE", os.F_OK)
+            self._getstat("/i/2.txt")
+            self._getstat("/2.txt")
+            self._listdir("/i")
+            self._readlink("/2.txt")
+            self._access("/i/2.txt", os.R_OK)
+            self._access("/i/2.txt", os.W_OK)
+            self._access("/i/2.txt", os.X_OK)
+            self._listdir("/")
+
+
+        cacheableOperations()
+
+        self._fetchAll(self.source_memfs_inport)
+        self._fetchAll(self.cache_memfs_inport)
+
+        '''
         cache_check = map(lambda x: x[1] + x[2], cache_check)
         cache_check = dict(zip(cache_check, map(lambda x: cache_check.count(x), cache_check)))
 
-        '''
         self.assertEqual([], filter(lambda x: x > 1, cache_check.values()), 
                 "Memory cache not used in some cases, number of repetead operations:\n" 
                 + str('\n'.join([str(x) for x in list(filter(lambda x: x[1] > 1, cache_check.items()))])))
         '''
 
-        os.listdir(self.cfg.cache_fs.cache_fs_mountpoint)
-        os.listdir(self.cfg.cache_fs.cache_fs_mountpoint)
-        os.listdir(self.cfg.cache_fs.cache_fs_mountpoint)
-        cache_check = self.fetchAll(self.cache_memfs_inport)
-        print(cache_check)
+        cacheableOperations()
+
+        source_check = self._fetchAll(self.source_memfs_inport)
+        self.assertEqual([], source_check)
+
+        cache_check = self._fetchAll(self.cache_memfs_inport)
+        self.assertEqual([], cache_check)
