@@ -509,8 +509,8 @@ class CacheFsModuleTest(ModuleTestCase):
             '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),
             '--cache-dir={cache}'.format(cache=self.cfg.cache_manager.cache_root_dir),
             '--log={log_path}'.format(log_path=os.path.join(self.cfg.ut_tests_root, "LOG_" + self.__class__.__name__ + str(self.tag))),
-            '--long-stamp={long_stamp}'.format(long_stamp=600),
-            '--short-stamp={short_stamp}'.format(short_stamp=100),
+            '--disk-cache-lifetime={disk_cache_lifetime}'.format(disk_cache_lifetime=self.cfg.cache_manager.disk_cache_lifetime),
+            '--memory-cache-lifetime={memory_cache_lifetime}'.format(memory_cache_lifetime=self.cfg.cache_manager.memory_cache_lifetime),
             '--debug',
             '-f' # foreground
         ]
@@ -878,21 +878,22 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
     def __init__(self, *args, **kw):
         CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
         self.moxConfig = mox.Mox()
+        self.initialTimeValue = 0
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
-            mkdir i
-            echo 'dummy content' >> i/2.txt
-            chmod ugo+rwx i/2.txt
-            ln -s i/2.txt 2.txt
-            ''')
+            mkdir dir
+            echo "Dummy content" >> dir/file
+            echo "Dummy content of file 2" >> dir/file
+            ln -s dir/file link
+        ''')
 
     def mount_cachefs(self):
         self.timeModule = mocks.time_mock.ModuleInterface()
         self.timeController = self.timeModule.getController()
 
         self.moxConfig.StubOutWithMock(self.timeController, "time")
-        self.timeController.time().MultipleTimes().AndReturn(17)
+        self.timeController.time().MultipleTimes().AndReturn(self.initialTimeValue)
         self.moxConfig.ReplayAll()
 
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
@@ -909,13 +910,40 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
         self.moxConfig.UnsetStubs()
 
     def test(self):
-
+        pass
+        '''
         #self.moxConfig.UnsetStubs() # seems to be unnecessary
         self.moxConfig.ResetAll()
         #self.moxConfig.StubOutWithMock(self.timeController, "time") # seems to be unnecessary
         self.timeController.time().MultipleTimes().AndReturn(19)
         self.moxConfig.ReplayAll()
 
-        self._getstat("/i/2.txt")
-        self._getstat("/2.txt")
+        self._getstat("/dir")
+        self._getstat("/dir/file")
+        '''
 
+class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
+
+    def test(self):
+        pass
+
+class DiscCacheExpiration(CacheFsWithMockedTimerTestCase):
+
+    def test(self):
+        pass
+        '''
+        self._getstat("/dir")
+        self.assertTrue(0 > len(TestHelper.fetch_all(self.source_memfs_inport)))
+
+        self._getstat("/dir")
+        self.assertTrue(0 == len(TestHelper.fetch_all(self.source_memfs_inport)))
+
+        # move time forward to trigger time expiration
+        self.moxConfig.ResetAll()
+        newTime = self.initialTimeValue + self.cfg.cache_manager.disk_cache_lifetime + 1
+        self.timeController.time().MultipleTimes().AndReturn(newTime)
+        self.moxConfig.ReplayAll()
+
+        self._getstat("/dir")
+        self.assertTrue(0 > len(TestHelper.fetch_all(self.source_memfs_inport)))
+        '''

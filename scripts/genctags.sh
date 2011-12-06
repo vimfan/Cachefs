@@ -22,17 +22,19 @@ create_file_list()
     find -L . -name "*.py" > $FILES_TO_INDEX_TMP_FILE
 }
 
-delete_file_list()
-{
-    rm -f $FILES_TO_INDEX_TMP_FILE
-}
-
 generate_ctags()
 {
     num_of_files=`wc -l ${FILES_TO_INDEX_TMP_FILE}`
     echo "Generating tags... number of files: ${num_of_files}"
     ctags -L $FILES_TO_INDEX_TMP_FILE --language-force=python
 }
+
+delete_file_list()
+{
+    echo ""
+    #rm -f $FILES_TO_INDEX_TMP_FILE
+}
+
 
 create_interfaces_dir
 create_symlinks

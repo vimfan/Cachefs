@@ -1,10 +1,10 @@
 ID=
 COVERAGE_BIN=/usr/bin/coverage
 
-all:
-	echo "nothing"
+dummy:
+	echo ""
 
-tags: *
+tags: dummy
 	scripts/genctags.sh
 
 tests:
@@ -17,5 +17,6 @@ coverage:
 	$(COVERAGE_BIN) report
 	$(COVERAGE_BIN) html
 
-#test: *.py
-	#python -v -m unittest $(TCP)
+clean: 
+	find . -name "*.pyc" -o -name "*.swp" | xargs rm -f
+	scripts/cleanup.sh

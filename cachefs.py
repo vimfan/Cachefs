@@ -62,8 +62,8 @@ class CacheFs(fuse.Fuse):
         self.cfg.cache_manager.source_dir = options.source_dir
         INFO("Cache source dir: %s" % self.cfg.cache_manager.source_dir)
 
-        self.cfg.cache_manager.long_stamp = options.long_stamp
-        self.cfg.cache_manager.short_stamp = options.short_stamp
+        self.cfg.cache_manager.disk_cache_lifetime = options.disk_cache_lifetime
+        self.cfg.cache_manager.memory_cache_lifetime = options.memory_cache_lifetime
 
         self.cfg.cache_fs.cache_fs_mountpoint = self.fuse_args.mountpoint
         INFO("Mountpoint: %s" % self.cfg.cache_fs.cache_fs_mountpoint)
@@ -919,17 +919,17 @@ def main():
                              metavar="MANDATORY_EXISTING_CACHE_DIR_PATH",
                              type="str")
 
-    server.parser.add_option('--long-stamp',
-                             dest="long_stamp", 
+    server.parser.add_option('--disk-cache-lifetime',
+                             dest="disk_cache_lifetime", 
                              help="Long time stamp lifetime in seconds. (default: 600)", 
-                             metavar="INTERVAL", 
+                             metavar="TIME_IN_SECONDS", 
                              type="int",
                              default=600)
 
-    server.parser.add_option('--short-stamp',
-                             dest="short_stamp", 
+    server.parser.add_option('--memory-cache-lifetime',
+                             dest="memory_cache_lifetime", 
                              help="Short time stamp lifetime in seconds. (default: 60)", 
-                             metavar="INTERVAL",
+                             metavar="TIME_IN_SECONDS",
                              type="int",
                              default=60)
 

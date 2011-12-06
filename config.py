@@ -14,8 +14,8 @@ class Config(object):
         def __init__(self):
             self.cache_root_dir = os.path.join(getCommonPrefix(), '.cache')
             self.source_dir = os.path.join(getCommonPrefix(), 'sshfs')
-            self.long_stamp = None
-            self.short_stamp = None
+            self.disk_cache_lifetime = 600
+            self.memory_cache_lifetime = 60
 
     class CacheFsConfig(object):
 
