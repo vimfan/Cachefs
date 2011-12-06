@@ -267,9 +267,7 @@ class MemoryCache(object):
             self.children = {}
             self.target = None
             self.stat = None
-
-        def add_child(self, name):
-            self.children[name] = MemoryCache.TreeNode(self)
+            self.timestamp = time.time()
 
     class GetattrEntry:
 
@@ -298,8 +296,9 @@ class MemoryCache(object):
         '''
         node = self._get_node(path)
         if node:
-            if node.parent is None and not node.stat: # root
+            if node.parent is None and not node.stat: # FIXME: workaround for root
                 return None
+            DEBUG("timestamp: " + str(node.timestamp))
             return node
         else:
             if loclogger.debug:
@@ -917,7 +916,7 @@ def main():
     server.parser.add_option('-c', '--cache-dir',
                              dest='cache_dir',
                              help="Path to directory with cache (will be created if not exists)",
-                             metavar="MANDATORY_CACHE_DIR_PATH",
+                             metavar="MANDATORY_EXISTING_CACHE_DIR_PATH",
                              type="str")
 
     server.parser.add_option('--long-stamp',
@@ -974,7 +973,6 @@ if __name__ == '__main__':
         time = time_module
         time_stubbed = False
 
-     #DEBUG("time stubbed: " + str(time_stubbed))
     try:
         if time_stubbed:
             #DEBUG("timeMock::initialize()")
@@ -987,6 +985,7 @@ if __name__ == '__main__':
     except Exception, e:
         print(str(e))
 
+    DEBUG("time stubbed: " + str(time_stubbed))
     INFO("File system unmounted")
 else:
     import time as time_module

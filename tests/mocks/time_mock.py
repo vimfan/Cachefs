@@ -63,7 +63,7 @@ class TimeMock(object):
         if hasattr(time, item):
             def rpcWrapper(*args, **kw):
                 operation = item
-                self._inOutPort.send({'method' : 'time', 'args' : args, 'kw' : kw})
+                self._inOutPort.send({'method' : item, 'args' : args, 'kw' : kw})
                 ret = self._inOutPort.receive(1.0)
                 return ret
             return rpcWrapper

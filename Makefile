@@ -4,8 +4,8 @@ COVERAGE_BIN=/usr/bin/coverage
 all:
 	echo "nothing"
 
-tags: *.py
-	ctags -R * --language-force=python
+tags: *
+	scripts/genctags.sh
 
 tests:
 	nosetests-2.7 -v 

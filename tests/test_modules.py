@@ -449,7 +449,7 @@ class CacheFsModuleTest(ModuleTestCase):
     def _readlink(self, path):
         return os.readlink(self._abspath(path))
 
-    def _access(self, path, mode):
+    def _access(self, path, mode=os.F_OK):
         return os.access(self._abspath(path), mode)
 
     def _abspath(self, path):
@@ -511,6 +511,8 @@ class CacheFsModuleTest(ModuleTestCase):
             '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),
             '--cache-dir={cache}'.format(cache=self.cfg.cache_manager.cache_root_dir),
             '--log={log_path}'.format(log_path=os.path.join(self.cfg.ut_tests_root, "LOG_" + self.__class__.__name__ + str(self.tag))),
+            '--long-stamp={long_stamp}'.format(long_stamp=600),
+            '--short-stamp={short_stamp}'.format(short_stamp=100),
             '--debug',
             '-f' # foreground
         ]
@@ -840,7 +842,9 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
         TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
 class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
-    '''Testcase with mocked: time, source directory, cache directory'''
+
+    def __init__(self, *args, **kw):
+        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -849,10 +853,6 @@ class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
             chmod ugo+rwx i/2.txt
             ln -s i/2.txt 2.txt
             ''')
-
-
-    def __init__(self, *args, **kw):
-        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
     def test(self):
 
@@ -881,14 +881,20 @@ class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
         self.assertEqual([], cache_check)
 
 
-class TestWithMockTimer(CacheFsModuleTest):
+class BaseWithTimer(CacheFsModuleTest):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
+        self.moxConfig = mox.Mox()
 
     def mount_cachefs(self):
         self.timeModule = mocks.time_mock.ModuleInterface()
         self.timeController = self.timeModule.getController()
+
+        self.moxConfig.StubOutWithMock(self.timeController, "time")
+        self.timeController.time().MultipleTimes().AndReturn(1234)
+        self.moxConfig.ReplayAll()
+
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
         CacheFsModuleTest.mount_cachefs(self)
@@ -900,7 +906,17 @@ class TestWithMockTimer(CacheFsModuleTest):
         self.timeController.dispose()
         self.timeModule.server.join()
 
-    def test(self):
-        pass
+    def precondition(self):
+        TestHelper.execute_source(self.cfg, '''
+            mkdir i
+            echo 'dummy content' >> i/2.txt
+            chmod ugo+rwx i/2.txt
+            ln -s i/2.txt 2.txt
+            ''')
 
+    def test(self):
+        self._access('/')
+        self._access('/i')
+        self._access('/i/2.txt')
+        self._listdir('/')
 
