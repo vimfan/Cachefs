@@ -291,12 +291,12 @@ class CacheManagerModuleTest(ModuleTestCase):
 
 class CreateCacheDir(CacheManagerModuleTest):
 
-    def test_create_cache_dir(self):
+    def test(self):
         self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
 
 class Exists(CacheManagerModuleTest):
 
-    def test_exists(self):
+    def test(self):
         file_path = '/TestCacheManager.test_exists.txt'
         TestHelper.create_source_file(self.cfg.cache_manager,
                                       file_path,
@@ -305,22 +305,20 @@ class Exists(CacheManagerModuleTest):
 
 class ExistsRoot(CacheManagerModuleTest):
 
-    def test_exists_root(self):
+    def test(self):
         file_path = '/'
         self.assertTrue(self.sut.exists(file_path))
 
 class IsDir(CacheManagerModuleTest):
 
-    def test_is_dir(self):
-        '''CacheManagerModuleTest: is directory'''
+    def test(self):
         dir_path = '/TestCacheManager.test_is_dir'
         TestHelper.create_source_dir(self.cfg.cache_manager, dir_path)
         self.assertTrue(self.sut.exists(dir_path))
         self.assertTrue(self.sut.is_dir(dir_path))
 
 class ListDir(CacheManagerModuleTest):
-    def test_list_dir(self):
-        '''CacheManagerModuleTest: list directories'''
+    def test(self):
         dir_path = "/TestCacheManager.test_list_dir"
         cfg = self.cfg.cache_manager
         TestHelper.create_source_dir(cfg, dir_path)
@@ -534,7 +532,6 @@ class TestDirectoriesOnly(CacheFsModuleTest):
                                                   TestDirectoriesOnly.SUB_SUBDIR_2]))
 
     def test(self):
-        '''App test: directories'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
         self.assertEqual(2, len(dirs))
@@ -576,7 +573,6 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
         TestHelper.create_source_file(cfg, cls.FILE_2_SUBPATH, cls.FILE_2_CONTENT)
 
     def test(self):
-        '''App test: Check directories and files'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         path, dirs, files = os.walk(mountpoint).next()
 
@@ -622,8 +618,6 @@ class RelativePaths(CacheFsModuleTest):
         TestHelper.create_source_file(cfg, cls.FILE_3, cls.FILE_CONTENT_3)
 
     def test(self):
-        '''App test: Relative paths'''
-
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
         cls = RelativePaths
 
@@ -671,7 +665,6 @@ class GetattrFs(CacheFsModuleTest):
         CacheFsModuleTest.cleanupWorkspaceImpl(self)
 
     def test(self):
-        '''App test: file permissions'''
         def getstat(path):
             full_path = os.sep.join([self.cfg.cache_fs.cache_fs_mountpoint, path])
             return os.lstat(full_path)
@@ -710,7 +703,6 @@ class SymbolicLinks(CacheFsModuleTest):
             ''')
 
     def test(self):
-        '''App test: Symbolic links'''
         mountpoint = self.cfg.cache_fs.cache_fs_mountpoint
 
         full_path = os.sep.join([mountpoint, 'a/b/c'])
@@ -881,30 +873,11 @@ class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
         self.assertEqual([], cache_check)
 
 
-class BaseWithTimer(CacheFsModuleTest):
+class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
 
     def __init__(self, *args, **kw):
         CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
         self.moxConfig = mox.Mox()
-
-    def mount_cachefs(self):
-        self.timeModule = mocks.time_mock.ModuleInterface()
-        self.timeController = self.timeModule.getController()
-
-        self.moxConfig.StubOutWithMock(self.timeController, "time")
-        self.timeController.time().MultipleTimes().AndReturn(1234)
-        self.moxConfig.ReplayAll()
-
-        os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
-                   os.path.join(config.getProjectRoot(), 'mocks'))
-        CacheFsModuleTest.mount_cachefs(self)
-
-    def tearDownImpl(self):
-        CacheFsModuleTest.tearDownImpl(self)
-        os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
-        self.timeController.finalize()
-        self.timeController.dispose()
-        self.timeModule.server.join()
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -914,9 +887,35 @@ class BaseWithTimer(CacheFsModuleTest):
             ln -s i/2.txt 2.txt
             ''')
 
+    def mount_cachefs(self):
+        self.timeModule = mocks.time_mock.ModuleInterface()
+        self.timeController = self.timeModule.getController()
+
+        self.moxConfig.StubOutWithMock(self.timeController, "time")
+        self.timeController.time().MultipleTimes().AndReturn(17)
+        self.moxConfig.ReplayAll()
+
+        os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
+                   os.path.join(config.getProjectRoot(), 'mocks'))
+        CacheFsModuleTest.mount_cachefs(self)
+
+
+    def tearDownImpl(self):
+        CacheFsModuleTest.tearDownImpl(self)
+        os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
+        self.timeController.finalize()
+        self.timeController.dispose()
+        self.timeModule.server.join()
+        self.moxConfig.UnsetStubs()
+
     def test(self):
-        self._access('/')
-        self._access('/i')
-        self._access('/i/2.txt')
-        self._listdir('/')
+
+        #self.moxConfig.UnsetStubs() # seems to be unnecessary
+        self.moxConfig.ResetAll()
+        #self.moxConfig.StubOutWithMock(self.timeController, "time") # seems to be unnecessary
+        self.timeController.time().MultipleTimes().AndReturn(19)
+        self.moxConfig.ReplayAll()
+
+        self._getstat("/i/2.txt")
+        self._getstat("/2.txt")
 
