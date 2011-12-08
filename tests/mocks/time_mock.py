@@ -2,6 +2,7 @@ from commport import Port
 from time import *
 import time
 import threading
+import sys
 
 class TimeController(object):
     '''Object of this class is used by test suite to set current time'''
@@ -51,16 +52,12 @@ class TimeController(object):
 
 
     def loop(self):
-        print("TimeController::loop()")
         while not self.finished:
             try:
                 event = self._inOutPort.receive(0.1)
-                print("Try Handle")
                 self.handle(event)
             except:
-                print("Waiting...")
                 pass
-        print("TimeController::loop() end")
 
 class TimeMock(object):
     '''Object of this class encapsulates original time module interface'''
@@ -78,7 +75,7 @@ class TimeMock(object):
             def rpcWrapper(*args, **kw):
                 operation = item
                 self._inOutPort.send({'method' : item, 'args' : args, 'kw' : kw})
-                ret = self._inOutPort.receive(1.0)
+                ret = self._inOutPort.receive(2.0)
                 return ret
             return rpcWrapper
         return getattr(self, item)
@@ -101,9 +98,10 @@ class ModuleInterface(object):
         timeController.loop()
 
     def getController(self):
-        self.server = threading.Thread(target=ModuleInterface._runController, args=(self.timeController,))
-        self.server.setDaemon(False)
-        self.server.start()
+        if not self.server:
+            self.server = threading.Thread(target=ModuleInterface._runController, args=(self.timeController,))
+            self.server.setDaemon(False)
+            self.server.start()
         return self.timeController
 
     def __getattr__(self, item):

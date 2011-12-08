@@ -50,8 +50,7 @@ class TestHelper:
         ret = []
         try:
             while True:
-                print("Receive...")
-                msg = port.receive(0.5)
+                msg = port.receive(0.2)
                 ret.append(msg)
         except InPort.Timeout, e:
             print("All message received from port, number: " + str(len(ret)))
@@ -940,6 +939,23 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
         self._getstat("/dir/file")
         '''
 
+class locked(object):
+
+    def __init__(self, lockable):
+        self._lockable = lockable
+
+    def __enter__(self):
+        self._lockable.lock()
+
+    def __exit__(self, type, value, traceback):
+        self._lockable.unlock()
+
+    def __getattr__(self, item):
+        if hasattr(self.lockable, item):
+            return getattr(self.lockable, item)
+        return getattr(self, item)
+
+
 class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
 
     def test(self):
@@ -959,21 +975,7 @@ class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
         self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
         self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
 
-        class locked(object):
-
-            def __init__(self, lockable):
-                self._lockable = lockable
-
-            def __enter__(self):
-                self._lockable.lock()
-
-            def __exit__(self, type, value, traceback):
-                self._lockable.unlock()
-
-            def __getattr__(self, item):
-                if hasattr(self.lockable, item):
-                    return getattr(self.lockable, item)
-                return getattr(self, item)
+        time.sleep(1.0)
 
         with locked(self.timeController):
             self.moxConfig.UnsetStubs()

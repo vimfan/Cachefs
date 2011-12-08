@@ -4,6 +4,7 @@ import SocketServer
 import Queue
 import time
 import os
+import sys
 
 import pickle
 import StringIO
@@ -54,7 +55,7 @@ class DefaultEventDecoder(object):
 class EventHandler(SocketServer.BaseRequestHandler):
 
     def __init__(self, eventDecoder, *args, **kw):
-        self.eventDecoder = eventDecoder
+        self.__eventDecoder = eventDecoder
         SocketServer.BaseRequestHandler.__init__(self, *args, **kw)
 
     def handle(self):
@@ -71,11 +72,11 @@ class EventHandler(SocketServer.BaseRequestHandler):
 
             dataStream = StringIO.StringIO(data)
             try:
-                event = self.eventDecoder.decode(dataStream) #pickle.load(dataStream)
+                event = self.__eventDecoder.decode(dataStream) #pickle.load(dataStream)
                 #event = pickle.load(dataStream)
                 self.server.eventQueue.put(event)
             except Exception, e: # FIXME
-                print("commport.py: " + str(e))
+                print("commport.py: " + str(e), sys.stderr)
 
 
 class EventHandlerCreator(object):
@@ -95,13 +96,13 @@ class InPort(object):
         self.eventQueue = Queue.Queue()
         self.__unixPort = unixPort
         self.server = None 
-        self.eventHandlerCreator = EventHandlerCreator(eventDecoder)
+        self.__eventHandlerCreator = EventHandlerCreator(eventDecoder)
 
     def __repr__(self):
         return "<InPort {port}>".format(port=os.path.basename(self.__unixPort))
 
     def listen(self):
-        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort, self.eventHandlerCreator)
+        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort, self.__eventHandlerCreator)
         # Start a thread with the server -- that thread will then start one
         # more thread for each request
         serverThread = threading.Thread(target=self.server.serve_forever)
