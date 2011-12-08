@@ -11,14 +11,20 @@ import StringIO
 import inspect
 
 
+class DefaultEventEncoder(object):
+
+    def encode(self, event):
+        return pickle.dumps(event)
+
 class OutPort(object):
 
     class ConnectionError(Exception):
         pass
 
-    def __init__(self, unixPort):
+    def __init__(self, unixPort, eventEncoder=DefaultEventEncoder()):
         self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.__unixPort = unixPort
+        self.__eventEncoder = eventEncoder
 
     def __del__(self):
         self.__socket.close()
@@ -34,27 +40,68 @@ class OutPort(object):
 
     def send(self, event):
         try:
-            pickledEvent = pickle.dumps(event)
+            pickledEvent = self.__eventEncoder.encode(event) # pickle.dumps(event)
             # sizeOfEvent in 4 bytes, then SerializedEvent
             self.__socket.send(''.join(['%04d' % len(pickledEvent), pickledEvent]))
         except Exception, e: # FIXME
             print("OutPort::send() exception: %s" % str(e))
+
+class DefaultEventDecoder(object):
+
+    def decode(self, dataStream):
+        return pickle.load(dataStream)
+
+class EventHandler(SocketServer.BaseRequestHandler):
+
+    def __init__(self, eventDecoder, *args, **kw):
+        self.eventDecoder = eventDecoder
+        SocketServer.BaseRequestHandler.__init__(self, *args, **kw)
+
+    def handle(self):
+        while True:
+            data = ''
+            buffer_size_str = self.request.recv(4)
+            if not buffer_size_str:
+                break
+
+            buffer_size = int(buffer_size_str)
+            read_buffer = self.request.recv(buffer_size)
+            if read_buffer:
+                data = ''.join([data, read_buffer])
+
+            dataStream = StringIO.StringIO(data)
+            try:
+                event = self.eventDecoder.decode(dataStream) #pickle.load(dataStream)
+                #event = pickle.load(dataStream)
+                self.server.eventQueue.put(event)
+            except Exception, e: # FIXME
+                print("commport.py: " + str(e))
+
+
+class EventHandlerCreator(object):
+
+    def __init__(self, eventDecoder):
+        self.eventDecoder = eventDecoder
+
+    def __call__(self, *args, **kw):
+        return EventHandler(self.eventDecoder, *args, **kw)
 
 class InPort(object):
 
     class Timeout(Exception):
         pass
 
-    def __init__(self, unixPort):
+    def __init__(self, unixPort, eventDecoder=DefaultEventDecoder()):
         self.eventQueue = Queue.Queue()
         self.__unixPort = unixPort
         self.server = None 
+        self.eventHandlerCreator = EventHandlerCreator(eventDecoder)
 
     def __repr__(self):
         return "<InPort {port}>".format(port=os.path.basename(self.__unixPort))
 
     def listen(self):
-        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort)
+        self.server = InPort.StreamServer(self.eventQueue, self.__unixPort, self.eventHandlerCreator)
         # Start a thread with the server -- that thread will then start one
         # more thread for each request
         serverThread = threading.Thread(target=self.server.serve_forever)
@@ -75,30 +122,9 @@ class InPort(object):
 
     class StreamServer(SocketServer.ThreadingUnixStreamServer):
 
-        def __init__(self, eventQueue, unixPort):
-            SocketServer.ThreadingUnixStreamServer.__init__(self, unixPort, InPort.EventHandler)
+        def __init__(self, eventQueue, unixPort, eventHandlerCreator):
+            SocketServer.ThreadingUnixStreamServer.__init__(self, unixPort, eventHandlerCreator)
             self.eventQueue = eventQueue
-
-    class EventHandler(SocketServer.BaseRequestHandler):
-
-        def handle(self):
-            while True:
-                data = ''
-                buffer_size_str = self.request.recv(4)
-                if not buffer_size_str:
-                    break
-
-                buffer_size = int(buffer_size_str)
-                read_buffer = self.request.recv(buffer_size)
-                if read_buffer:
-                    data = ''.join([data, read_buffer])
-
-                dataStream = StringIO.StringIO(data)
-                try:
-                    event = pickle.load(dataStream)
-                    self.server.eventQueue.put(event)
-                except Exception, e: # FIXME
-                    print(str(lineno()) + str(e))
 
 class Port(InPort, OutPort):
 
