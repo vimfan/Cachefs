@@ -53,20 +53,9 @@ import calendar
 import logging
 import traceback
 
-import memfs_log
 
 def dbLoggable(f):
-    def wrapper(*args, **kw):
-        func_name = f.func_name
-        retval = f(*args, **kw)
-        try:
-            memfs_log.insert(func_name, [args[1:], kw], retval)
-        except:
-            exc_traceback = traceback.format_exc()
-            logging.info("func_name: " + func_name)
-            logging.info(exc_traceback)
-        return retval
-    return wrapper
+    return f
 
 LOG_FILENAME = "LOG"
 logging.basicConfig(filename=LOG_FILENAME,level=logging.DEBUG,)
@@ -290,13 +279,8 @@ class File(FSObject):
             st_gid=gid)
         self.data = data
         self.parent = parent
-<<<<<<< HEAD
         self.keep_cache = False
         self.direct_io = False
-=======
-        self.direct_io = False
-        self.keep_cache = False
->>>>>>> 7cdf319b39ea1e1a66aaaeb505e13e93e67af94f
 
     def read(self, size, offset):
         """
@@ -446,7 +430,6 @@ class MemFS(fuse.Fuse):
         """
         logging.info("File system mounted")
         self.root_dir = Dir('/', stat.S_IFDIR|0755, os.getuid(), os.getgid())
-        memfs_log.create_database('memfs_log.sqlite3')
 
     def fsdestroy(self):
         """
@@ -454,7 +437,6 @@ class MemFS(fuse.Fuse):
         It doesn't have to exist, or do anything.
         """
         logging.info("Unmounting file system")
-        memfs_log.drop_database()
 
     @dbLoggable
     def statfs(self):

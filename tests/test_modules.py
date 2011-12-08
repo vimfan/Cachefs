@@ -21,6 +21,7 @@ import config
 import test_config
 import cachefs
 import mounter
+from mocks.events import FilesystemEvent
 from mocks.commport import InPort
 import mocks.time_mock
 
@@ -49,7 +50,8 @@ class TestHelper:
         ret = []
         try:
             while True:
-                msg = port.receive(0.01)
+                print("Receive...")
+                msg = port.receive(0.5)
                 ret.append(msg)
         except InPort.Timeout, e:
             print("All message received from port, number: " + str(len(ret)))
@@ -236,7 +238,7 @@ class CacheFsUnitTest(unittest.TestCase):
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
 
     def test_memcache_get_attributes(self):
-        memcache = cachefs.MemoryCache()
+        memcache = self._create_memcache()
 
         root_path = "/"
         root_stat = 54321
@@ -251,7 +253,7 @@ class CacheFsUnitTest(unittest.TestCase):
         self.assertEqual(some_stat, memcache.get_attributes(some_path).stat)
 
     def test_memcache_cache_link_target(self):
-        memcache = cachefs.MemoryCache()
+        memcache = self._create_memcache()
         some_target = "target"
         some_path = "/example/link"
         self.assertEqual(None, memcache.read_link(some_path))
@@ -259,14 +261,14 @@ class CacheFsUnitTest(unittest.TestCase):
         self.assertEqual(some_target, memcache.read_link(some_path).target)
 
     def test_memcache_save_stamp(self):
-        memcache = cachefs.MemoryCache()
+        memcache = self._create_memcache()
         some_path = "/example/dir"
         self.assertFalse(memcache.has_stamp(some_path))
         memcache.save_stamp(some_path)
         self.assertTrue(memcache.has_stamp(some_path))
 
     def test_memcache_list_dir(self):
-        memcache = cachefs.MemoryCache()
+        memcache = self._create_memcache()
         memcache.cache_attributes('/', 1)
         memcache.cache_attributes('/home', 2)
         memcache.cache_attributes('/home/a', 3)
@@ -274,6 +276,9 @@ class CacheFsUnitTest(unittest.TestCase):
 
         self.assertEqual(['home'], memcache.list_dir('/'))
         self.assertEqual(['a', 'b'], memcache.list_dir('/home'))
+
+    def _create_memcache(self):
+        return cachefs.MemoryCache(self.sut.cfg.cache_manager.memory_cache_lifetime)
 
 class CacheManagerModuleTest(ModuleTestCase):
 
@@ -443,6 +448,8 @@ class CacheFsModuleTest(ModuleTestCase):
     def _listdir(self, path):
         return os.listdir(self._abspath(path))
 
+    def _open(self, path):
+        return open(self._abspath(path))
 
     def _readlink(self, path):
         return os.readlink(self._abspath(path))
@@ -515,7 +522,15 @@ class CacheFsModuleTest(ModuleTestCase):
             '-f' # foreground
         ]
         self.cachefs_mounter = mounter.FuseFsMounter(cmdline_options)
-        self.cachefs_mounter.mount()
+        try:
+            self.cachefs_mounter.mount()
+        except:
+            print("************************************************")
+            print("************************************************")
+            print("CANNOT MOUNT CACHEFS, TRYING TO CLEANUP THE MESS")
+            print("************************************************")
+            print("************************************************")
+            self.cleanupWorkspace()
 
 class TestDirectoriesOnly(CacheFsModuleTest):
 
@@ -892,13 +907,16 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
         self.timeModule = mocks.time_mock.ModuleInterface()
         self.timeController = self.timeModule.getController()
 
-        self.moxConfig.StubOutWithMock(self.timeController, "time")
-        self.timeController.time().MultipleTimes().AndReturn(self.initialTimeValue)
+        self.moxConfig.StubOutWithMock(self.timeController, "_timeImpl")
+        self.timeController._timeImpl().MultipleTimes().AndReturn(self.initialTimeValue)
         self.moxConfig.ReplayAll()
 
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
         CacheFsModuleTest.mount_cachefs(self)
+
+        TestHelper.fetch_all(self.source_memfs_inport)
+        TestHelper.fetch_all(self.cache_memfs_inport)
 
 
     def tearDownImpl(self):
@@ -925,25 +943,72 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
 class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
 
     def test(self):
-        pass
+        self.maxDiff = None
+
+        st = self._getstat("/dir/file")
+        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+
+        self.assertEqual(st, self._getstat("/dir/file"))
+        self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+        self.assertEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+
+        f = self._open("/dir/file")
+        f.close()
+
+        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+
+        class locked(object):
+
+            def __init__(self, lockable):
+                self._lockable = lockable
+
+            def __enter__(self):
+                self._lockable.lock()
+
+            def __exit__(self, type, value, traceback):
+                self._lockable.unlock()
+
+            def __getattr__(self, item):
+                if hasattr(self.lockable, item):
+                    return getattr(self.lockable, item)
+                return getattr(self, item)
+
+        with locked(self.timeController):
+            self.moxConfig.UnsetStubs()
+            self.moxConfig.StubOutWithMock(self.timeController, "_timeImpl")
+            newTime = self.initialTimeValue + self.cfg.cache_manager.memory_cache_lifetime + 1
+            self.assertTrue(newTime - self.initialTimeValue < self.cfg.cache_manager.disk_cache_lifetime)
+            self.timeController._timeImpl().MultipleTimes().AndReturn(newTime)
+            self.moxConfig.ReplayAll()
+
+        self._getstat("/dir/file")
+
+        self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
 
 class DiscCacheExpiration(CacheFsWithMockedTimerTestCase):
 
     def test(self):
-        pass
+        self.maxDiff = None
+
+        self._getstat("/dir/file")
+        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+
+        self._getstat("/")
+        self._getstat("/dir")
+        self._getstat("/dir/file")
+        self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+
+        # TODO
         '''
-        self._getstat("/dir")
-        self.assertTrue(0 > len(TestHelper.fetch_all(self.source_memfs_inport)))
-
-        self._getstat("/dir")
-        self.assertTrue(0 == len(TestHelper.fetch_all(self.source_memfs_inport)))
-
         # move time forward to trigger time expiration
         self.moxConfig.ResetAll()
         newTime = self.initialTimeValue + self.cfg.cache_manager.disk_cache_lifetime + 1
         self.timeController.time().MultipleTimes().AndReturn(newTime)
         self.moxConfig.ReplayAll()
 
-        self._getstat("/dir")
-        self.assertTrue(0 > len(TestHelper.fetch_all(self.source_memfs_inport)))
+        self._getstat("/dir/file")
+        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
         '''

@@ -8,6 +8,9 @@ import os
 import pickle
 import StringIO
 
+import inspect
+
+
 class OutPort(object):
 
     class ConnectionError(Exception):
@@ -35,7 +38,7 @@ class OutPort(object):
             # sizeOfEvent in 4 bytes, then SerializedEvent
             self.__socket.send(''.join(['%04d' % len(pickledEvent), pickledEvent]))
         except Exception, e: # FIXME
-            print(str(e))
+            print("OutPort::send() exception: %s" % str(e))
 
 class InPort(object):
 
@@ -95,7 +98,7 @@ class InPort(object):
                     event = pickle.load(dataStream)
                     self.server.eventQueue.put(event)
                 except Exception, e: # FIXME
-                    print(str(e))
+                    print(str(lineno()) + str(e))
 
 class Port(InPort, OutPort):
 

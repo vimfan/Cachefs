@@ -53,6 +53,7 @@ import calendar
 import logging
 
 import commport
+from events import FilesystemEvent
 
 # FUSE version at the time of writing. Be compatible with this version.
 fuse.fuse_python_api = (0, 2)
@@ -271,6 +272,7 @@ def logEvent(f):
         operation = f.func_name
         params = [args[1:], kw]
         output = f(*args, **kw)
+        #g_outPort.send(FilesystemEvent(time.clock(), operation, str(params), str(output)))
         g_outPort.send([time.clock(), operation, str(params), str(output)])
         return output
 
@@ -295,8 +297,8 @@ class File(FSObject):
             st_gid=gid)
         self.data = data
         self.parent = parent
-        self.direct_io = True
-        self.keep_cache = True
+        self.direct_io = False
+        self.keep_cache = False
 
     @logEvent
     def read(self, size, offset):

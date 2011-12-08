@@ -1,3 +1,4 @@
 * Implement correct error handling during testcase running (release all resources - especially unmount filesystem for cache and source)
 * Add support for relative paths passed to options --cache-dir, and --source-dir, as well as mountpoint
 * Add support to coverage measurement in case of module/component tests
+* rewrite memory stamps to use TreeNodes

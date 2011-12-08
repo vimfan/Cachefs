@@ -9,6 +9,7 @@ class TimeController(object):
         self._inOutPort = Port(outUnixAddr, inUnixAddr)
         self.finished = False
         self.timeReturn = 17
+        self._lock = threading.Lock()
 
     def initialize(self):
         self._inOutPort.initialize()
@@ -20,21 +21,34 @@ class TimeController(object):
         print("TimeController::dispose()" + `self._inOutPort`)
         self._inOutPort.dispose()
 
+    def lock(self):
+        self._lock.acquire()
+
+    def unlock(self):
+        self._lock.release()
+
     def handle(self, event):
         args = event['args']
         kw = event['kw']
         method = event['method']
         try:
+            self._lock.acquire()
             ret = getattr(self, method)(*args, **kw)
             print("TimeMock::" + method + "(...) -> {ret}".format(ret=str(ret)))
         except Exception, e:
             ret = getattr(time, method)(*args, **kw)
             print("time." + method + "(...) -> " + str(ret))
+        finally:
+            self._lock.release()
 
         return self._inOutPort.send(ret)
 
     def time(self):
+        return self._timeImpl()
+
+    def _timeImpl(self):
         return self.timeReturn
+
 
     def loop(self):
         print("TimeController::loop()")

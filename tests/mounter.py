@@ -50,18 +50,18 @@ class FuseFsMounter(object):
 
     def _wait_for_mount(self):
 
-        def is_mount():
-            return os.path.ismount(self._mountpoint)
+        def is_mounted():
+            return os.path.ismount(self._mountpoint) and os.path.exists(self._mountpoint)
 
         interval = 0.2
         wait_for_mount = 3
         logging.info("Waiting for mount: %s sec" % wait_for_mount)
         time_start = time.time()
         time_elapsed = 0
-        mounted = is_mount()
+        mounted = is_mounted()
         while ((not mounted) and time_elapsed < wait_for_mount):
             time.sleep(interval)
-            mounted = is_mount()
+            mounted = is_mounted()
             time_elapsed = time.time() - time_start
         if not mounted:
             raise Exception("Filesystem not mounted after %d secs" % wait_for_mount)
