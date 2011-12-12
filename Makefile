@@ -1,22 +1,40 @@
-ID=
-COVERAGE_BIN=/usr/bin/coverage
+ID :=
+SCRIPTS              := scripts
+COVERAGE_BIN         := $(shell which coverage)
+NOSETESTS_BIN        := $(shell which nosetests-2.7)
+GENCSTAGS_BIN        := $(SCRIPTS)/genctags.sh
+CLEANUP_BIN          := $(SCRIPTS)/cleanup.sh
 
-dummy:
-	echo ""
+COVERAGE             := $(SCRIPTS)/coverage.sh
+COVERAGE_ENABLED     := enabled_coverage.sh
+COVERAGE_DISABLED 	 := disabled_coverage.sh
+COVERAGE_REPORT_DIR  := tests/coverage_report
 
-tags: dummy
-	scripts/genctags.sh
 
-tests:
-	nosetests-2.7 -v 
-test:
-	nosetests-2.7 -v --with-id $(ID)
+.PHONY: disable_coverage enable_coverage clean tags
 
-coverage:
-	nosetests-2.7 -v --with-coverage --cover-package=sshcachefs
-	$(COVERAGE_BIN) report
-	$(COVERAGE_BIN) html
+disable_coverage:
+	@ln -snf $(COVERAGE_DISABLED) $(COVERAGE)
+
+enable_coverage:
+	@ln -snf $(COVERAGE_ENABLED) $(COVERAGE)
+	@echo "Coverage reporing enabled."
+
+test: disable_coverage
+	$(NOSETESTS_BIN) --with-yanc -v --with-id $(ID)
+
+coverage: enable_coverage
+	@$(COVERAGE_BIN) erase
+	@rm -Rf $(COVERAGE_REPORT_DIR) && echo "Report dir: $(COVERAGE_REPORT_DIR) cleaned up"
+	@$(COVERAGE_BIN) run --branch --source . --omit "*interfaces*" -p  $(NOSETESTS_BIN) --with-yanc -v --with-id $(ID)
+	@echo "Combining results..."
+	@$(COVERAGE_BIN) combine
+	@echo "Generating html report..."
+	@$(COVERAGE_BIN) html -d $(COVERAGE_REPORT_DIR)
+	@$(COVERAGE_BIN) erase
 
 clean: 
-	find . -name "*.pyc" -o -name "*.swp" | xargs rm -f
-	scripts/cleanup.sh
+	@$(CLEANUP_BIN)
+
+tags: 
+	$(GENCSTAGS_BIN)

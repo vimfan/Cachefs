@@ -1,4 +1,8 @@
 *.pyc
 *.swo
 *.swp
+*.noseids
+.interfaces
+scripts/coverage.sh
+tests/coverage_report
 tags

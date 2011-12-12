@@ -1,5 +1,12 @@
 #!/bin/bash
 
+for mountpoint in `mount | grep -i $PWD | cut -f 3 -d " "`;
+do
+    echo "unmounting $mountpoint..."
+    fusermount -u $mountpoint;
+    echo "done."
+done
+
 echo "remove sockets"
 find . -name '*.sock' | xargs rm -f
 

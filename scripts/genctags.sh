@@ -2,7 +2,7 @@
 
 SCRIPTS_DIR=scripts
 FILES_TO_INDEX_TMP_FILE=source_list
-INTERFACES_DIR=interfaces
+INTERFACES_DIR=.interfaces
 
 create_interfaces_dir() 
 {
@@ -13,7 +13,7 @@ create_interfaces_dir()
 create_symlinks()
 {
     echo "Creating symlinks..."
-    $SCRIPTS_DIR/create_symlinks_for_tags.py interfaces
+    $SCRIPTS_DIR/create_symlinks_for_tags.py ${INTERFACES_DIR}
 }
 
 create_file_list()
@@ -32,7 +32,7 @@ generate_ctags()
 delete_file_list()
 {
     echo ""
-    #rm -f $FILES_TO_INDEX_TMP_FILE
+    rm -f $FILES_TO_INDEX_TMP_FILE
 }
 
 

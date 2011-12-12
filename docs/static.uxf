@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<diagram program="umlet" version="11.0">
+  <zoom_level>10</zoom_level>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>100</x>
+      <y>240</y>
+      <w>200</w>
+      <h>170</h>
+    </coordinates>
+    <panel_attributes>DiskCache
+--
++cacheDirectory(path)
++getAttributes(path)
++getPathToCachedFile(path)
++isDirectoryCached(path)
++isDirectory(path)
++isExisting(path)
++listDirectory(path)
++readLink(path)
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>400</x>
+      <y>380</y>
+      <w>260</w>
+      <h>240</h>
+    </coordinates>
+    <panel_attributes>FsAdapter
+--
++getattr(path)
++readlink(path)
++read(path)
++open(path)
++release(path)
++access(path, flags)
++opendir(path)
++readdir(path)
++fsinit()
++fsdestroy()
++statfs()
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>360</x>
+      <y>30</y>
+      <w>340</w>
+      <h>190</h>
+    </coordinates>
+    <panel_attributes>jjjMemoryCache
+--
++getAttributes(path)
++listDir(path)
++cacheAttributes(path, stat)
++cacheLinkTarget(path, target)
++readLink(path)
+
++has_stamp(path) # to remove
++save_stamp(path) # to remove
++has_all_children(path) # to remove
++set_children_availability_cache(self, path, flag) # to remove</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>750</x>
+      <y>260</y>
+      <w>200</w>
+      <h>130</h>
+    </coordinates>
+    <panel_attributes>CacheManager
+--
++exists(path)
++getAttributes(path)
++getPathToCachedFile(path)
++isDirectory(path)
++listDir(path)
++readLink(path)
+
+
+</panel_attributes>
+    <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Class</type>
+    <coordinates>
+      <x>50</x>
+      <y>40</y>
+      <w>100</w>
+      <h>80</h>
+    </coordinates>
+    <panel_attributes>Config
+--
++parse()
+-validate()</panel_attributes>
+    <additional_attributes/>
+  </element>
+</diagram>

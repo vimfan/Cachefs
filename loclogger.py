@@ -1,28 +1,52 @@
 import logging
 import os
 import traceback
+import inspect
+import datetime
 
 __initialized = False
 debug = False
 
+currentLine = 0
 depth = 0
-offset = 0
-curr_filename = ''
-curr_line = ''
+offset = ''
 
-def _DEBUG_IMPL(msg):
+def time_file_line_prefix(f):
+    def wrapper(msg, filename=None, line=None):
+        global offset
+        global currentLine
+
+        currentLine += 1
+        invoker = inspect.getouterframes(inspect.currentframe())[1]
+        if filename is None:
+            filename = invoker[1]
+            filename = os.path.basename(filename)
+        if line is None:
+            line = invoker[2]
+
+        now = datetime.datetime.now()
+        msg_lines = str(msg).split('\n')
+        if not msg_lines[-1]:
+            del msg_lines[-1]
+        for msg_line in msg_lines:
+            s = '{line:<6}{time} # {fileline:<21}|{offset}{msg}'.format(
+                line=currentLine,
+                time='{0:>2}.{1:>2}.{2:>2}:{3:>6}'.format(now.hour, now.minute, now.second, now.microsecond),
+                fileline=filename + ":" + str(line),
+                offset=offset,
+                msg=str(msg_line))
+            f(s)
+    return wrapper
+
+@time_file_line_prefix
+def DEBUG(msg):
     logging.debug(msg)
 
-def DEBUG(msg):
-    global curr_filename
-    global curr_line
-    global offset
-    s = ''.join(["#", str(curr_filename), ":", str(curr_line), str(offset), str(msg)])
-    _DEBUG_IMPL(s)
-
+@time_file_line_prefix
 def INFO(msg):
     logging.info(msg)
 
+@time_file_line_prefix
 def ERROR(msg):
     logging.error(msg)
 
@@ -41,7 +65,7 @@ def initialize(logfile='logs/LOG'):
     if os.path.exists(logfile):
         os.remove(logfile)
 
-    FORMAT="%(asctime)-15s %(message)s"
+    FORMAT="%(message)s"
     logging.basicConfig(filename=logfile,level=logging.DEBUG,format=FORMAT)
 
     __initialized = True
@@ -51,26 +75,27 @@ def NO_LOG(msg):
 
 #ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
 
-def method_logger(f):
-    def wrapper(*args, **kw):
+def trace(f):
+    def callWrapper(*args, **kw):
         global depth
         global offset
-        global curr_filename
-        global curr_line
         try:
             class_name = args[0].__class__.__name__
             func_name = f.func_name
-            curr_filename = os.path.basename(f.func_code.co_filename)
-            curr_line = f.func_code.co_firstlineno
+            invoker = inspect.getouterframes(inspect.currentframe())[1]
+            curr_filename = os.path.basename(invoker[1])
+            curr_line = invoker[2]
+            previous_line = curr_line
             depth += 1
             offset = depth * "\t"
             s = str("{%s- %s.%s(args: %s, kw: %s)" %
                           (depth, class_name, func_name, args[1:], kw))
-            DEBUG(s)
+            DEBUG(s, curr_filename, curr_line)
             retval = f(*args, **kw)
             s = str("-%s} %s.%s(...) -> returns: %s(%r)" %
                           (depth, class_name, func_name, type(retval), retval))
-            DEBUG(s)
+            DEBUG(s, curr_filename, curr_line)
+            curr_line = previous_line
             depth -= 1
             offset = depth * "\t"
             return retval
@@ -79,4 +104,5 @@ def method_logger(f):
             exc_traceback = traceback.format_exc()
             ERROR("Exception traceback: %s" % exc_traceback)
             raise inst
-    return wrapper
+
+    return callWrapper

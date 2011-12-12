@@ -10,8 +10,11 @@ import signal
 
 class FuseFsMounter(object):
 
-    def __init__(self, cmdline):
-        self._mountpoint = cmdline[1]
+    def __init__(self, cmdline, mountpoint=None):
+        if mountpoint:
+            self._mountpoint = mountpoint
+        else:
+            self._mountpoint = cmdline[1]
         self._cmdline = cmdline
         print(self._mountpoint)
         assert(os.path.isdir(self._mountpoint))

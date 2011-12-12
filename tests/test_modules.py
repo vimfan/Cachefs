@@ -24,83 +24,9 @@ import mounter
 from mocks.events import FilesystemEvent
 from mocks.commport import InPort
 import mocks.time_mock
-
-#sys.path.remove("../")
-
-def logger_tm(f):
-    def wrapper(*args, **kw):
-        class_name = args[0].__class__.__name__
-        func_name = f.func_name
-        cachefs.DEBUG("TESTCASE ---------- %s.%s ---------------" % (class_name, func_name))
-        retval =  f(*args, **kw)
-        cachefs.DEBUG("END OF TESTCASE ---------- %s.%s ---------------" % (class_name, func_name))
-        return retval
-    wrapper.func_name = f.func_name
-    wrapper.__doc__ = f.__doc__
-    return wrapper
-
-class TestHelper:
-
-    @staticmethod
-    def get_cfg():
-        return test_config.getConfig()
-
-    @staticmethod
-    def fetch_all(port):
-        ret = []
-        try:
-            while True:
-                msg = port.receive(0.2)
-                ret.append(msg)
-        except InPort.Timeout, e:
-            print("All message received from port, number: " + str(len(ret)))
-            pass
-        return ret
-
-
-    @staticmethod
-    def create_source_dir(cfg, path = ''):
-        if path:
-            source_dir = os.sep.join([cfg.source_dir, path])
-        else:
-            source_dir = cfg.source_dir
-        os.makedirs(source_dir)
-
-    @staticmethod
-    def remove_source_dir(cfg, path = ''):
-        assert(cfg.source_dir)
-        if path:
-            source_dir = os.path.join(cfg.source_dir, path)
-        else:
-            source_dir = cfg.source_dir
-        shutil.rmtree(source_dir)
-
-    @staticmethod
-    def remove_source_file(cfg, subpath):
-        source_path = os.sep.join([cfg.source_dir, subpath])
-        os.unlink(source_path)
-
-    @staticmethod
-    def create_source_file(cfg, subpath, content = ''):
-        source_path = os.sep.join([cfg.source_dir, subpath])
-        f = open(source_path, 'w')
-        f.write(content)
-        f.close()
-
-    @staticmethod
-    def execute_source(cfg, script):
-        cwd = os.getcwd()
-        os.chdir(cfg.cache_manager.source_dir)
-        named_tmp_file = tempfile.NamedTemporaryFile('wx+b')
-        named_tmp_file.write(script)
-        named_tmp_file.flush()
-        TMP_BIN = '/tmp/tmp_bin'
-        shutil.copyfile(named_tmp_file.name, TMP_BIN)
-        os.chmod(TMP_BIN, 0777)
-        fnull = open(os.devnull, 'w')
-        assert(0 == subprocess.call([TMP_BIN], shell = True, stdout = fnull))
-        os.unlink(TMP_BIN)
-        os.chdir(cwd)
+from test_helper import TestHelper
+import disk_cache
+import path_factory
 
 class ModuleTestCase(unittest.TestCase):
 
@@ -138,165 +64,24 @@ class ModuleTestCase(unittest.TestCase):
     def cleanupWorkspaceImpl(self):
         pass
 
-class CacheFsUnitTest(unittest.TestCase):
-
-    def setUp(self):
-        self.sut = cachefs.CacheFs()
-        self.sut.cfg = TestHelper.get_cfg()
-
-    def tearDown(self):
-        pass
-
-    def test_access(self):
-        # inject mock
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-
-        # setup mock
-        cache_mgr_mock.exists('file1').AndReturn(True)
-        cache_mgr_mock.exists('file2').AndReturn(False)
-        cache_mgr_mock.exists('file3').AndReturn(True)
-        mox.Replay(cache_mgr_mock)
-
-        failure = -errno.EACCES
-        success = 0
-        self.assertEqual(success, self.sut.access('file1', os.F_OK));
-        self.assertEqual(failure, self.sut.access('file2', os.F_OK));
-        self.assertEqual(success, self.sut.access('file3', os.F_OK));
-        self.assertEqual(failure, self.sut.access('file3', os.W_OK));
-        self.assertEqual(success, self.sut.access('file4', os.R_OK | os.X_OK));
-
-    def test_readdir(self):
-        DIRPATH = '/DIR'
-        dir_entries = ['file', 'subdir', 'file2']
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock.exists(DIRPATH).AndReturn(True)
-        cache_mgr_mock.is_dir(DIRPATH).AndReturn(True)
-        cache_mgr_mock.list_dir(DIRPATH).AndReturn(dir_entries)
-        mox.Replay(cache_mgr_mock)
-
-        dir_entries_match = dir_entries + ['.', '..']
-        readdir_entries = []
-
-        for entry in self.sut.readdir(DIRPATH, 0, ''):
-            self.assertTrue(isinstance(entry, fuse.Direntry))
-            self.assertTrue(entry.name in dir_entries_match)
-            readdir_entries.append(entry.name)
-
-        self.assertEqual(sorted(dir_entries_match), sorted(readdir_entries))
-
-    def test_readdir_dir_not_exists(self):
-        DIRPATH = '/DIR'
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock.exists(DIRPATH).AndReturn(False)
-        mox.Replay(cache_mgr_mock)
-
-        self.assertEqual(None, self.sut.readdir(DIRPATH).next())
-
-    def test_readdir_on_file(self):
-        DIRPATH = '/DIR'
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock.exists(DIRPATH).AndReturn(True)
-        cache_mgr_mock.is_dir(DIRPATH).AndReturn(False)
-        mox.Replay(cache_mgr_mock)
-
-        self.assertEqual(None, self.sut.readdir(DIRPATH).next())
-
-    def test_opendir_success(self):
-        DIRPATH = '/DIR'
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock._has_init_stamp(DIRPATH).AndReturn(False)
-        cache_mgr_mock.exists(DIRPATH).AndReturn(True)
-        cache_mgr_mock.is_dir(DIRPATH).AndReturn(True)
-        mox.Replay(cache_mgr_mock)
-
-        self.assertEqual(None, self.sut.opendir(DIRPATH))
-
-    def test_opendir_not_dir(self):
-        FILEPATH = '/FILE'
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock._has_init_stamp(FILEPATH).AndReturn(False)
-        cache_mgr_mock.exists(FILEPATH).AndReturn(True)
-        cache_mgr_mock.is_dir(FILEPATH).AndReturn(False)
-        mox.Replay(cache_mgr_mock)
-
-        self.assertEqual(-errno.ENOENT, self.sut.opendir(FILEPATH))
-
-    def test_opendir_path_not_exists(self):
-        DIRPATH = '/DIR'
-
-        cache_mgr_mock = self.sut.cache_mgr = mox.MockObject(cachefs.CacheManager)
-        cache_mgr_mock._has_init_stamp(DIRPATH).AndReturn(False)
-        cache_mgr_mock.exists(DIRPATH).AndReturn(False)
-        mox.Replay(cache_mgr_mock)
-
-        self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))
-
-    def test_memcache_get_attributes(self):
-        memcache = self._create_memcache()
-
-        root_path = "/"
-        root_stat = 54321
-        self.assertEqual(None, memcache.get_attributes(root_path))
-        memcache.cache_attributes(root_path, root_stat)
-        self.assertEqual(root_stat, memcache.get_attributes(root_path).stat)
-
-        some_stat = 12345
-        some_path = "/example/file"
-        self.assertEqual(None, memcache.get_attributes(some_path))
-        memcache.cache_attributes(some_path, some_stat)
-        self.assertEqual(some_stat, memcache.get_attributes(some_path).stat)
-
-    def test_memcache_cache_link_target(self):
-        memcache = self._create_memcache()
-        some_target = "target"
-        some_path = "/example/link"
-        self.assertEqual(None, memcache.read_link(some_path))
-        memcache.cache_link_target(some_path, some_target)
-        self.assertEqual(some_target, memcache.read_link(some_path).target)
-
-    def test_memcache_save_stamp(self):
-        memcache = self._create_memcache()
-        some_path = "/example/dir"
-        self.assertFalse(memcache.has_stamp(some_path))
-        memcache.save_stamp(some_path)
-        self.assertTrue(memcache.has_stamp(some_path))
-
-    def test_memcache_list_dir(self):
-        memcache = self._create_memcache()
-        memcache.cache_attributes('/', 1)
-        memcache.cache_attributes('/home', 2)
-        memcache.cache_attributes('/home/a', 3)
-        memcache.cache_attributes('/home/b', 4)
-
-        self.assertEqual(['home'], memcache.list_dir('/'))
-        self.assertEqual(['a', 'b'], memcache.list_dir('/home'))
-
-    def _create_memcache(self):
-        return cachefs.MemoryCache(self.sut.cfg.cache_manager.memory_cache_lifetime)
-
 class CacheManagerModuleTest(ModuleTestCase):
 
     def setUpImpl(self):
+        cachefs.memory_cache.time = time
         self.cfg = TestHelper.get_cfg()
         self.sut = cachefs.CacheManager(self.cfg.cache_manager)
-        self.sut.run()
 
     def tearDownImpl(self):
-        self.sut.stop()
+        pass
 
     def cleanupWorkspaceImpl(self):
         TestHelper.remove_source_dir(self.cfg.cache_manager)
-        shutil.rmtree(self.sut.cfg.cache_root_dir)
+        shutil.rmtree(self.sut._cfg.cache_root_dir)
 
 class CreateCacheDir(CacheManagerModuleTest):
 
     def test(self):
-        self.assertTrue(os.path.exists(self.sut.cfg.cache_root_dir))
+        self.assertTrue(os.path.exists(self.sut._cfg.cache_root_dir))
 
 class Exists(CacheManagerModuleTest):
 
@@ -305,25 +90,25 @@ class Exists(CacheManagerModuleTest):
         TestHelper.create_source_file(self.cfg.cache_manager,
                                       file_path,
                                       '.' * 5)
-        self.assertTrue(self.sut.exists(file_path))
+        self.assertTrue(self.sut.isExisting(file_path))
 
 class ExistsRoot(CacheManagerModuleTest):
 
     def test(self):
         file_path = '/'
-        self.assertTrue(self.sut.exists(file_path))
+        self.assertTrue(self.sut.isExisting(file_path))
 
 class IsDir(CacheManagerModuleTest):
 
     def test(self):
-        dir_path = '/TestCacheManager.test_is_dir'
+        dir_path = '/TestCacheManager.test_isDirectory'
         TestHelper.create_source_dir(self.cfg.cache_manager, dir_path)
-        self.assertTrue(self.sut.exists(dir_path))
-        self.assertTrue(self.sut.is_dir(dir_path))
+        self.assertTrue(self.sut.isExisting(dir_path))
+        self.assertTrue(self.sut.isDirectory(dir_path))
 
 class ListDir(CacheManagerModuleTest):
     def test(self):
-        dir_path = "/TestCacheManager.test_list_dir"
+        dir_path = "/TestCacheManager.test_listDir"
         cfg = self.cfg.cache_manager
         TestHelper.create_source_dir(cfg, dir_path)
 
@@ -335,36 +120,35 @@ class ListDir(CacheManagerModuleTest):
         file_path = os.sep.join([dir_path, file_name])
         TestHelper.create_source_file(cfg, file_path, 'file_content ... ')
 
-        self.assertTrue(self.sut.exists(dir_path))
+        self.assertTrue(self.sut.isExisting(dir_path))
         #precond:
-        self.sut.get_attributes(dir_path)
+        self.sut.getAttributes(dir_path)
 
-        list_dir_out = self.sut.list_dir(dir_path)
-        self.assertTrue(self.sut._has_init_stamp(dir_path))
+        listDir_out = self.sut.listDirectory(dir_path)
 
         input = [file_name, subdir_name]
-        self.assertEqual(sorted(input), sorted(list_dir_out))
+        self.assertEqual(sorted(input), sorted(listDir_out))
 
-        cache_root_path = self.sut.cfg.cache_root_dir
-        cache_dir_walker = cachefs.CacheManager.CachedDirWalker(cache_root_path)
-        path_transformer = cachefs.CacheManager.PathTransformer()
+        cache_root_path = self.sut._cfg.cache_root_dir
+        cache_dir_walker = disk_cache.CachedDirWalker(cache_root_path)
+        path_transformer = path_factory.PathTransformer()
 
         cached_subdir_path = os.sep.join(
-            [cache_root_path, dir_path, path_transformer.transform_dirpath(subdir_name)])
+            [cache_root_path, dir_path, path_transformer.transformDirpath(subdir_name)])
 
         self.assertTrue(os.path.exists(cached_subdir_path))
 
         cached_file_path = os.sep.join(
-            [cache_root_path, path_transformer.transform_filepath(file_name)])
+            [cache_root_path, path_transformer.transformFilepath(file_name)])
 
         self.assertFalse(os.path.exists(cached_file_path))
 
 
 class Getattr(CacheManagerModuleTest):
     def test(self):
-        self.sut.get_attributes('.')
+        self.sut.getAttributes('.')
 
-class CacheFsModuleTest(ModuleTestCase):
+class CachefsSystemTest(ModuleTestCase):
 
     def __init__(self, *args, **kw):
         try:
@@ -447,6 +231,9 @@ class CacheFsModuleTest(ModuleTestCase):
     def _listdir(self, path):
         return os.listdir(self._abspath(path))
 
+    def _opendir(self, path):
+        return os.opendir(self._abspath(path))
+
     def _open(self, path):
         return open(self._abspath(path))
 
@@ -510,6 +297,7 @@ class CacheFsModuleTest(ModuleTestCase):
 
     def mount_cachefs(self):
         cmdline_options = [
+            os.path.join(config.getProjectRoot(), 'scripts', 'coverage.sh'),
             os.path.join(config.getProjectRoot(), 'cachefs.py'),
             self.cfg.cache_fs.cache_fs_mountpoint,
             '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),
@@ -520,7 +308,7 @@ class CacheFsModuleTest(ModuleTestCase):
             '--debug',
             '-f' # foreground
         ]
-        self.cachefs_mounter = mounter.FuseFsMounter(cmdline_options)
+        self.cachefs_mounter = mounter.FuseFsMounter(cmdline_options, self.cfg.cache_fs.cache_fs_mountpoint)
         try:
             self.cachefs_mounter.mount()
         except:
@@ -531,7 +319,7 @@ class CacheFsModuleTest(ModuleTestCase):
             print("************************************************")
             self.cleanupWorkspace()
 
-class TestDirectoriesOnly(CacheFsModuleTest):
+class TestDirectoriesOnly(CachefsSystemTest):
 
     SUBDIR_1 = 'subdir1'
     SUBDIR_2 = 'subdir2'
@@ -568,7 +356,7 @@ class TestDirectoriesOnly(CacheFsModuleTest):
         self.assertEqual(0, len(dirs))
         self.assertEqual(0, len(files))
 
-class TestDirectoriesAndFiles(CacheFsModuleTest):
+class TestDirectoriesAndFiles(CachefsSystemTest):
 
     SUBDIR_1 = 'subdir1'
     FILE_1 = 'file1'
@@ -605,7 +393,31 @@ class TestDirectoriesAndFiles(CacheFsModuleTest):
         file.close()
         self.assertEqual(cls.FILE_1_CONTENT, read_content)
 
-class RelativePaths(CacheFsModuleTest):
+class TestBigFilesWithContent(CachefsSystemTest):
+
+    FILE_CONTENT = ''
+    FILE_PATH = '/bigfile'
+    FILE_SIZE = 2**24 # 16 Mb
+
+    def precondition(self):
+        cls = TestBigFilesWithContent
+        cls.FILE_CONTENT = ":-)" * cls.FILE_SIZE  # 3 * 16Mb
+        TestHelper.create_source_file(self.cfg.cache_manager,
+                                      cls.FILE_PATH,
+                                      cls.FILE_CONTENT)
+
+    def test(self):
+        cls = TestBigFilesWithContent
+        f = self._open(cls.FILE_PATH)
+        content = f.read()
+        self.assertEqual(content, cls.FILE_CONTENT)
+
+    def tearDownImpl(self):
+        CachefsSystemTest.tearDownImpl(self)
+        TestBigFilesWithContent.FILE_CONTENT = None
+
+
+class RelativePaths(CachefsSystemTest):
 
     SUBDIR = 'subdir'
     FILE = 'file'
@@ -640,16 +452,16 @@ class RelativePaths(CacheFsModuleTest):
         self.assertEqual(cls.FILE_CONTENT, open(normalized_filepath).read())
 
         FILE_RELATIVE = 'subdir/subdir2/subdir3/../../../file'
-        rel_filepath = os.sep.join([mountpoint, FILE_RELATIVE])
-        self.assertTrue(os.path.lexists(rel_filepath))
-        self.assertEqual(cls.FILE_CONTENT, open(rel_filepath).read())
+        filepath = os.sep.join([mountpoint, FILE_RELATIVE])
+        self.assertTrue(os.path.lexists(filepath))
+        self.assertEqual(cls.FILE_CONTENT, open(filepath).read())
 
         FILE2_RELATIVE = 'subdir/./subdir2/subdir3/../file2'
-        rel_filepath2 = os.sep.join([mountpoint, FILE2_RELATIVE])
-        self.assertTrue(os.path.lexists(rel_filepath2))
-        self.assertEqual(cls.FILE_CONTENT_2, open(rel_filepath2).read())
+        filepath2 = os.sep.join([mountpoint, FILE2_RELATIVE])
+        self.assertTrue(os.path.lexists(filepath2))
+        self.assertEqual(cls.FILE_CONTENT_2, open(filepath2).read())
 
-class GetattrFs(CacheFsModuleTest):
+class GetattrFs(CachefsSystemTest):
 
     permissions = [  0444, 0777, 0700, 07777, 04444 ]
 
@@ -672,11 +484,10 @@ class GetattrFs(CacheFsModuleTest):
 
     def cleanupWorkspaceImpl(self):
         # additional task to have permission to cleanup 
-        cachefs.DEBUG("cleanup LALALA")
         TestHelper.execute_source(self.cfg, '''
                 chmod +rwx -R .
                 ''')
-        CacheFsModuleTest.cleanupWorkspaceImpl(self)
+        CachefsSystemTest.cleanupWorkspaceImpl(self)
 
     def test(self):
         def getstat(path):
@@ -699,7 +510,7 @@ class GetattrFs(CacheFsModuleTest):
             check(item)
             check_dir(item)
 
-class SymbolicLinks(CacheFsModuleTest):
+class SymbolicLinks(CachefsSystemTest):
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -754,7 +565,7 @@ class SymbolicLinks(CacheFsModuleTest):
         self.assertTrue(os.path.islink(full_path))
         self.assertTrue(os.path.exists(full_path))
 
-class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
+class CachefsSystemTestAfterReboot(CachefsSystemTest):
 
     class DummyTest(object):
         def precondition(self):
@@ -770,8 +581,8 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
             pass
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTest.__init__(self, *args, **kw)
-        self._test = CacheFsModuleTestAfterReboot.DummyTest()
+        CachefsSystemTest.__init__(self, *args, **kw)
+        self._test = CachefsSystemTestAfterReboot.DummyTest()
 
     def initialize(self, test):
         self._test = test
@@ -787,11 +598,11 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
     '''
     def cleanupWorkspace(self):
         self._test.cleanupWorkspace()
-        CacheFsModuleTest.cleanupWorkspace(self)
+        CachefsSystemTest.cleanupWorkspace(self)
 
     def tearDownImpl(self):
         self._test.tearDownImpl()
-        CacheFsModuleTest.tearDownImpl(self)
+        CachefsSystemTest.tearDownImpl(self)
     '''
 
     def test(self):
@@ -807,38 +618,38 @@ class CacheFsModuleTestAfterReboot(CacheFsModuleTest):
         #self._test.tearDown()
 
 
-class TestDirectoriesOnlyAfterReboot(CacheFsModuleTestAfterReboot):
+class TestDirectoriesOnlyAfterReboot(CachefsSystemTestAfterReboot):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
+        CachefsSystemTestAfterReboot.__init__(self, *args, **kw)
         tc = TestDirectoriesOnly(*args, **kw)
         self.initialize(tc)
 
-class TestDirectoriesAndFilesAfterReboot(CacheFsModuleTestAfterReboot):
+class TestDirectoriesAndFilesAfterReboot(CachefsSystemTestAfterReboot):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
+        CachefsSystemTestAfterReboot.__init__(self, *args, **kw)
         tc = TestDirectoriesAndFiles(*args, **kw)
         self.initialize(tc)
 
-class TestRelativePathsAfterReboot(CacheFsModuleTestAfterReboot):
+class TestRelativePathsAfterReboot(CachefsSystemTestAfterReboot):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
+        CachefsSystemTestAfterReboot.__init__(self, *args, **kw)
         tc = RelativePaths(*args, **kw)
         self.initialize(tc)
 
-class TestGetattrFsAfterReboot(CacheFsModuleTestAfterReboot):
+class TestGetattrFsAfterReboot(CachefsSystemTestAfterReboot):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
+        CachefsSystemTestAfterReboot.__init__(self, *args, **kw)
         tc = GetattrFs(*args, **kw)
         self.initialize(tc)
 
-class TestSymbolicLinksAfterReboot(CacheFsModuleTestAfterReboot):
+class TestSymbolicLinksAfterReboot(CachefsSystemTestAfterReboot):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTestAfterReboot.__init__(self, *args, **kw)
+        CachefsSystemTestAfterReboot.__init__(self, *args, **kw)
         tc = SymbolicLinks(*args, **kw)
         self.initialize(tc)
 
@@ -847,10 +658,10 @@ class TestSymoblicLinksAfterRebootWithMemfs(TestSymbolicLinksAfterReboot):
     def __init__(self, *args, **kw):
         TestSymbolicLinksAfterReboot.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
-class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
+class TestAccessToCacheAndSourceDirectories(CachefsSystemTest):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
+        CachefsSystemTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -862,23 +673,38 @@ class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
 
     def test(self):
 
+        self.maxDiff = None
+
         def cacheableOperations():
             self._access("/NON_EXISTING_FILE", os.F_OK)
             self._getstat("/i/2.txt")
             self._getstat("/2.txt")
-            self._listdir("/i")
             self._readlink("/2.txt")
+            try:
+                self._readlink("/23.txt")
+            except OSError, e:
+                pass
             self._access("/i/2.txt", os.R_OK)
             self._access("/i/2.txt", os.W_OK)
             self._access("/i/2.txt", os.X_OK)
+            try:
+                self._listdir("/i/2.txt")
+            except OSError, e:
+                pass
+
+            self._listdir("/i")
             self._listdir("/")
 
         cacheableOperations()
+
+        time.sleep(0.5)
 
         TestHelper.fetch_all(self.source_memfs_inport)
         TestHelper.fetch_all(self.cache_memfs_inport)
 
         cacheableOperations()
+
+        time.sleep(0.5)
 
         source_check = TestHelper.fetch_all(self.source_memfs_inport)
         self.assertEqual([], source_check)
@@ -887,10 +713,10 @@ class TestAccessToCacheAndSourceDirectories(CacheFsModuleTest):
         self.assertEqual([], cache_check)
 
 
-class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
+class CacheFsWithMockedTimerTestCase(CachefsSystemTest):
 
     def __init__(self, *args, **kw):
-        CacheFsModuleTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
+        CachefsSystemTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
         self.moxConfig = mox.Mox()
         self.initialTimeValue = 0
 
@@ -898,7 +724,7 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
         TestHelper.execute_source(self.cfg, '''
             mkdir dir
             echo "Dummy content" >> dir/file
-            echo "Dummy content of file 2" >> dir/file
+            echo "Dummy content of file 2" >> dir/file2
             ln -s dir/file link
         ''')
 
@@ -912,14 +738,14 @@ class CacheFsWithMockedTimerTestCase(CacheFsModuleTest):
 
         os.symlink(os.path.join(config.getProjectRoot(), 'tests', 'mocks'), 
                    os.path.join(config.getProjectRoot(), 'mocks'))
-        CacheFsModuleTest.mount_cachefs(self)
+        CachefsSystemTest.mount_cachefs(self)
 
         TestHelper.fetch_all(self.source_memfs_inport)
         TestHelper.fetch_all(self.cache_memfs_inport)
 
 
     def tearDownImpl(self):
-        CacheFsModuleTest.tearDownImpl(self)
+        CachefsSystemTest.tearDownImpl(self)
         os.remove(os.path.join(config.getProjectRoot(), 'mocks'))
         self.timeController.finalize()
         self.timeController.dispose()
@@ -970,12 +796,13 @@ class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
         self.assertEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
 
         f = self._open("/dir/file")
+        f.readlines()
         f.close()
 
         self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
         self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
 
-        time.sleep(1.0)
+        time.sleep(0.5)
 
         with locked(self.timeController):
             self.moxConfig.UnsetStubs()
@@ -986,6 +813,12 @@ class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
             self.moxConfig.ReplayAll()
 
         self._getstat("/dir/file")
+
+        self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
+        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+
+        dirlist = self._listdir("/dir")
+        self.assertEqual(set(['file', 'file2']), set(dirlist))
 
         self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
         self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
