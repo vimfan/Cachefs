@@ -25,7 +25,8 @@ class CacheManager(object):
         memstat = self._memoryCache.getAttributes(path)
 
         if not memstat:
-            DEBUG("Checking cache directory for %s" % path)
+            if loclogger.debug:
+                DEBUG("Checking cache directory for %s" % path)
             st = self._getAttributesFromDiskCache(path)
             self._memoryCache.cacheAttributes(path, st)
             memstat = self._memoryCache.getAttributes(path)
@@ -38,7 +39,8 @@ class CacheManager(object):
         try:
             return self._memoryCache.listDirectory(path)
         except memory_cache.MemoryCacheNotValid, e:
-            DEBUG("Memory cache is not valid")
+            if loclogger.debug:
+                DEBUG("Memory cache is not valid")
             return self._diskCache.listDirectory(path)
 
     @trace
@@ -85,13 +87,15 @@ class CacheManager(object):
 
         except disk_cache.ParentDirNotCached, e:
 
-            DEBUG("Needs to cache directory: %s" % path)
+            if loclogger.debug:
+                DEBUG("Needs to cache directory: %s" % path)
             self._diskCache.cacheDirectory(os.path.dirname(path))
             return self._getAttributesFromDiskCache(path)
 
         except disk_cache.OriginFileNotExists, e:
 
-            DEBUG("File doesn't exist %s" % path)
+            if loclogger.debug:
+                DEBUG("File doesn't exist %s" % path)
             return None
 
 

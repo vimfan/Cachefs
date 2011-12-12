@@ -1,27 +1,29 @@
-ID :=
+ID                   :=
 SCRIPTS              := scripts
 COVERAGE_BIN         := $(shell which coverage)
 NOSETESTS_BIN        := $(shell which nosetests-2.7)
 GENCSTAGS_BIN        := $(SCRIPTS)/genctags.sh
 CLEANUP_BIN          := $(SCRIPTS)/cleanup.sh
 
-COVERAGE             := $(SCRIPTS)/coverage.sh
+WRAPPER              := $(SCRIPTS)/wrapper.sh
+
 COVERAGE_ENABLED     := enabled_coverage.sh
-COVERAGE_DISABLED 	 := disabled_coverage.sh
-COVERAGE_REPORT_DIR  := tests/coverage_report
+COVERAGE_DISABLED    := runner.sh
+COVERAGE_REPORT_DIR  := coverage_report
+
+PROFILER_ENABLED     := enabled_profiler.sh
+PROFILER_DISABLED    := runner.sh
+PROFILER_REPORT_DIR  := profiler_report
+PROFILER_CONFIG      := profiler.cfg
 
 
-.PHONY: disable_coverage enable_coverage clean tags
+.PHONY: enable_coverage enable_profiler disable_wrapper run_test tests coverage profile clean tags
 
-disable_coverage:
-	@ln -snf $(COVERAGE_DISABLED) $(COVERAGE)
-
-enable_coverage:
-	@ln -snf $(COVERAGE_ENABLED) $(COVERAGE)
-	@echo "Coverage reporing enabled."
-
-test: disable_coverage
+run_test: 
 	$(NOSETESTS_BIN) --with-yanc -v --with-id $(ID)
+
+tests: disable_wrapper
+	@$(MAKE) -e run_test
 
 coverage: enable_coverage
 	@$(COVERAGE_BIN) erase
@@ -33,8 +35,25 @@ coverage: enable_coverage
 	@$(COVERAGE_BIN) html -d $(COVERAGE_REPORT_DIR)
 	@$(COVERAGE_BIN) erase
 
+profile: enable_profiler
+	@rm -Rf $(PROFILER_REPORT_DIR)
+	@$(MAKE) -e run_test
+
+enable_profiler:
+	@echo $(PROFILER_REPORT_DIR) > $(PROFILER_CONFIG)
+	@ln -snf $(PROFILER_ENABLED) $(WRAPPER)
+	@echo "Profiler enabled."
+
+enable_coverage:
+	@ln -snf $(COVERAGE_ENABLED) $(WRAPPER)
+	@echo "Coverage reporing enabled."
+
+disable_wrapper:
+	@rm 
+
 clean: 
 	@$(CLEANUP_BIN)
+	@rm -Rf $(PROFILE_REPORT_DIR) && echo "Report dir: $(PROFILE_REPORT_DIR) cleanup up"
 
 tags: 
 	$(GENCSTAGS_BIN)

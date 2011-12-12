@@ -297,7 +297,7 @@ class CachefsSystemTest(ModuleTestCase):
 
     def mount_cachefs(self):
         cmdline_options = [
-            os.path.join(config.getProjectRoot(), 'scripts', 'coverage.sh'),
+            os.path.join(config.getProjectRoot(), 'scripts', 'wrapper.sh'),
             os.path.join(config.getProjectRoot(), 'cachefs.py'),
             self.cfg.cache_fs.cache_fs_mountpoint,
             '--source-dir={source}'.format(source=self.cfg.cache_manager.source_dir),

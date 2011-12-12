@@ -94,9 +94,10 @@ class MemoryCache(object):
                     return None
 
             if time.time() - node.timestamp < self._cache_lifetime:
-                DEBUG("time now: " + str(time.time()) 
-                      + ", memory cache lifetime: " + str(self._cache_lifetime)
-                      + ", node timestamp is: " + str(node.timestamp))
+                if loclogger.debug:
+                    DEBUG("time now: " + str(time.time()) 
+                          + ", memory cache lifetime: " + str(self._cache_lifetime)
+                          + ", node timestamp is: " + str(node.timestamp))
                 return node
             else:
                 self._remove_subtree(node)
