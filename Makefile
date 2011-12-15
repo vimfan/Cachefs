@@ -6,6 +6,7 @@ GENCSTAGS_BIN        := $(SCRIPTS)/genctags.sh
 CLEANUP_BIN          := $(SCRIPTS)/cleanup.sh
 
 WRAPPER              := $(SCRIPTS)/wrapper.sh
+DUMMY_WRAPPER        := runner.sh
 
 COVERAGE_ENABLED     := enabled_coverage.sh
 COVERAGE_DISABLED    := runner.sh
@@ -19,11 +20,14 @@ PROFILER_CONFIG      := profiler.cfg
 
 .PHONY: enable_coverage enable_profiler disable_wrapper run_test tests coverage profile clean tags
 
-run_test: 
+tests: disable_wrapper
+	@$(MAKE) -e __run_test
+
+__run_test: 
 	$(NOSETESTS_BIN) --with-yanc -v --with-id $(ID)
 
-tests: disable_wrapper
-	@$(MAKE) -e run_test
+show_tests:
+	$(NOSETESTS_BIN) --collect-only --with-id -v
 
 coverage: enable_coverage
 	@$(COVERAGE_BIN) erase
@@ -37,7 +41,7 @@ coverage: enable_coverage
 
 profile: enable_profiler
 	@rm -Rf $(PROFILER_REPORT_DIR)
-	@$(MAKE) -e run_test
+	@$(MAKE) -e __run_test
 
 enable_profiler:
 	@echo $(PROFILER_REPORT_DIR) > $(PROFILER_CONFIG)
@@ -49,7 +53,7 @@ enable_coverage:
 	@echo "Coverage reporing enabled."
 
 disable_wrapper:
-	@rm 
+	@ln -snf $(DUMMY_WRAPPER) $(WRAPPER)
 
 clean: 
 	@$(CLEANUP_BIN)

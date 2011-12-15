@@ -12,17 +12,50 @@ class MemoryCache(object):
 
     class TreeNode(object):
 
+        class Impl(object):
+
+            def __init__(self, parent=None):
+                self.parent = parent
+                self.timestamp = time.time()
+                self.stat = None
+                self.optionals = {}
+
+            @staticmethod
+            def listOfOptionals():
+                return ['children', 'target', 'lock', 'has_all_children']
+
         def __init__(self, parent=None):
-            # FIXME: needs to be memory optimized
-            # instead of members it shall use dictionary 
-            # for optional members
-            self.parent = parent
-            self.children = {}
-            self.target = None
-            self.stat = None
-            self.timestamp = time.time()
-            self.lock = False
-            self.has_all_children = False
+            self._impl = MemoryCache.TreeNode.Impl(parent)
+
+        def __getattribute__(self, item):
+
+            if item == '_impl':
+                return object.__getattribute__(self, item)
+
+            if hasattr(self._impl, item):
+                return getattr(self._impl, item)
+
+            if item in self._impl.optionals:
+                return self._impl.optionals[item]
+
+            if item in MemoryCache.TreeNode.Impl.listOfOptionals():
+                self.optionals[item] = None
+                return self.optionals[item]
+
+            return object.__getattribute__(self, item)
+
+        def __setattr__(self, item, value):
+
+            if item == '_impl':
+                object.__setattr__(self, item, value)
+
+            if hasattr(self._impl, item):
+                setattr(self._impl, item, value)
+
+            if item in MemoryCache.TreeNode.Impl.listOfOptionals():
+                self.optionals[item] = value
+
+            return object.__setattr__(self, item, value)
 
         def __repr__(self):
             return "<TreeNode>"
@@ -112,7 +145,7 @@ class MemoryCache(object):
         parts = self._split_path(path)
         curr_node = self._root
         for part in parts:
-            if not part in curr_node.children:
+            if not curr_node.children or (not part in curr_node.children):
                 return None
             else:
                 curr_node = curr_node.children[part]
@@ -122,6 +155,8 @@ class MemoryCache(object):
         parts = self._split_path(path)
         curr_node = self._root
         for part in parts:
+            if curr_node.children is None:
+                curr_node.children = {}
             if not part in curr_node.children:
                 curr_node.children[part] = MemoryCache.TreeNode(curr_node)
             curr_node = curr_node.children[part]

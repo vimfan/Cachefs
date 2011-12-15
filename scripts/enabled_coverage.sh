@@ -6,4 +6,6 @@ if [ $? -ne 0 ] ; then
     exit 1;
 fi
 
-$coverage run --branch -p --omit "*usr*" $@
+# disable debug
+cmdline=`echo $@ | sed -e s/--debug//g`
+$coverage run --branch -p --omit "*usr*" $cmdline

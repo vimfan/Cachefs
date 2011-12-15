@@ -1,4 +1,5 @@
 import cachefs
+import memory_cache
 import unittest
 from test_helper import TestHelper
 import time
@@ -12,6 +13,16 @@ class CacheFsUnitTest(unittest.TestCase):
 
     def tearDown(self):
         pass
+
+    def test_memory_cache_treenode(self):
+        treeNode = cachefs.memory_cache.MemoryCache.TreeNode(77)
+        self.assertEqual(77, treeNode.parent)
+
+        treeNode.children = []
+        self.assertEqual([], treeNode.children)
+
+        treeNode.target = 'foobar'
+        self.assertEqual('foobar', treeNode.target)
 
     def test_memory_cache_getAttributes(self):
         memory_cache = self._create_memory_cache()

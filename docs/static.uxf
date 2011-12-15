@@ -4,8 +4,8 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>100</x>
-      <y>240</y>
+      <x>730</x>
+      <y>370</y>
       <w>200</w>
       <h>170</h>
     </coordinates>
@@ -27,8 +27,8 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>400</x>
-      <y>380</y>
+      <x>50</x>
+      <y>160</y>
       <w>260</w>
       <h>240</h>
     </coordinates>
@@ -53,40 +53,36 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>360</x>
-      <y>30</y>
+      <x>730</x>
+      <y>90</y>
       <w>340</w>
-      <h>190</h>
+      <h>130</h>
     </coordinates>
-    <panel_attributes>jjjMemoryCache
+    <panel_attributes>MemoryCache
 --
-+getAttributes(path)
-+listDir(path)
 +cacheAttributes(path, stat)
 +cacheLinkTarget(path, target)
++getAttributes(path)
++listDirectory(path)
 +readLink(path)
-
-+has_stamp(path) # to remove
-+save_stamp(path) # to remove
-+has_all_children(path) # to remove
-+set_children_availability_cache(self, path, flag) # to remove</panel_attributes>
++hasAllChildrenAttributesCached(self, path, flag)</panel_attributes>
     <additional_attributes/>
   </element>
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>750</x>
-      <y>260</y>
+      <x>420</x>
+      <y>210</y>
       <w>200</w>
       <h>130</h>
     </coordinates>
     <panel_attributes>CacheManager
 --
-+exists(path)
 +getAttributes(path)
 +getPathToCachedFile(path)
++isExisting(path)
 +isDirectory(path)
-+listDir(path)
++listDirectory(path)
 +readLink(path)
 
 
@@ -96,8 +92,8 @@
   <element>
     <type>com.umlet.element.Class</type>
     <coordinates>
-      <x>50</x>
-      <y>40</y>
+      <x>310</x>
+      <y>420</y>
       <w>100</w>
       <h>80</h>
     </coordinates>
@@ -106,5 +102,61 @@
 +parse()
 -validate()</panel_attributes>
     <additional_attributes/>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>280</x>
+      <y>220</y>
+      <w>160</w>
+      <h>70</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+m2=1
+m1=1
+&lt;&lt;use&gt;&gt;</panel_attributes>
+    <additional_attributes>140;50;30;50</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>110</x>
+      <y>370</y>
+      <w>220</w>
+      <h>120</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+m2=1
+m1=1
+&lt;&lt;use&gt;&gt;</panel_attributes>
+    <additional_attributes>200;100;60;100;60;30</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>450</x>
+      <y>100</y>
+      <w>300</w>
+      <h>130</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+m2=1
+m1=1
+&lt;&lt;use&gt;&gt;</panel_attributes>
+    <additional_attributes>280;50;60;50;60;110</additional_attributes>
+  </element>
+  <element>
+    <type>com.umlet.element.Relation</type>
+    <coordinates>
+      <x>460</x>
+      <y>310</y>
+      <w>290</w>
+      <h>160</h>
+    </coordinates>
+    <panel_attributes>lt=&lt;-
+m2=1
+m1=1
+&lt;&lt;use&gt;&gt;</panel_attributes>
+    <additional_attributes>270;140;60;140;60;30</additional_attributes>
   </element>
 </diagram>

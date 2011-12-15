@@ -16,9 +16,9 @@ class CacheManager(object):
        
     def __init__(self, cfg):
         self._cfg = cfg
+        self._prepare_directories()
         self._memoryCache = MemoryCache(self._cfg.memory_cache_lifetime)
         self._diskCache = disk_cache.DiskCache(self._cfg, self._memoryCache)
-        self._prepare_directories()
 
     @trace
     def getAttributes(self, path, pathToCache=False):
@@ -35,7 +35,6 @@ class CacheManager(object):
 
     @trace
     def listDirectory(self, path):
-        # FIXME: do it with try catch
         try:
             return self._memoryCache.listDirectory(path)
         except memory_cache.MemoryCacheNotValid, e:

@@ -76,13 +76,13 @@ def NO_LOG(msg):
 #ERROR, DEBUG, INFO = NO_LOG, NO_LOG, NO_LOG
 
 def trace(f):
-    global debug
-    if not debug:
-        return f
-
     def callWrapper(*args, **kw):
         global depth
         global offset
+        global debug
+        if not debug:
+            return f(*args, **kw)
+
         try:
             class_name = args[0].__class__.__name__
             func_name = f.func_name
