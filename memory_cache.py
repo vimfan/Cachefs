@@ -21,7 +21,7 @@ class MemoryCache(object):
                 self.optionals = {}
 
             @staticmethod
-            def listOfOptionals():
+            def optionalFieldNames():
                 return ['children', 'target', 'lock', 'has_all_children']
 
         def __init__(self, parent=None):
@@ -38,7 +38,7 @@ class MemoryCache(object):
             if item in self._impl.optionals:
                 return self._impl.optionals[item]
 
-            if item in MemoryCache.TreeNode.Impl.listOfOptionals():
+            if item in MemoryCache.TreeNode.Impl.optionalFieldNames():
                 self.optionals[item] = None
                 return self.optionals[item]
 
@@ -50,10 +50,11 @@ class MemoryCache(object):
                 object.__setattr__(self, item, value)
 
             if hasattr(self._impl, item):
-                setattr(self._impl, item, value)
+                return setattr(self._impl, item, value)
 
-            if item in MemoryCache.TreeNode.Impl.listOfOptionals():
+            if item in MemoryCache.TreeNode.Impl.optionalFieldNames():
                 self.optionals[item] = value
+                return
 
             return object.__setattr__(self, item, value)
 
@@ -70,7 +71,7 @@ class MemoryCache(object):
         return self._getAttributes(path)
 
     @trace
-    def isExisting(self, path):
+    def exists(self, path):
 
         attr = self._getAttributes(path)
 
@@ -109,7 +110,7 @@ class MemoryCache(object):
         return node
 
     @trace
-    def hasAllChildrenAttributesCached(self, path, flag):
+    def markAsChildrenCached(self, path, flag):
         node = self._get_node(path)
         if node is None:
             node = self._create_node(path)

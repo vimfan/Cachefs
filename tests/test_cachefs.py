@@ -23,9 +23,9 @@ class CacheFsUnitTest(unittest.TestCase):
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
 
         # setup mock
-        cacheManagerMock.isExisting('file1').AndReturn(True)
-        cacheManagerMock.isExisting('file2').AndReturn(False)
-        cacheManagerMock.isExisting('file3').AndReturn(True)
+        cacheManagerMock.exists('file1').AndReturn(True)
+        cacheManagerMock.exists('file2').AndReturn(False)
+        cacheManagerMock.exists('file3').AndReturn(True)
         mox.Replay(cacheManagerMock)
 
         failure = -errno.EACCES
@@ -41,7 +41,7 @@ class CacheFsUnitTest(unittest.TestCase):
         dir_entries = ['file', 'subdir', 'file2']
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(DIRPATH).AndReturn(True)
+        cacheManagerMock.exists(DIRPATH).AndReturn(True)
         cacheManagerMock.isDirectory(DIRPATH).AndReturn(True)
         cacheManagerMock.listDirectory(DIRPATH).AndReturn(dir_entries)
         mox.Replay(cacheManagerMock)
@@ -60,7 +60,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(DIRPATH).AndReturn(False)
+        cacheManagerMock.exists(DIRPATH).AndReturn(False)
         mox.Replay(cacheManagerMock)
 
         self.assertEqual(None, self.sut.readdir(DIRPATH).next())
@@ -69,7 +69,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(DIRPATH).AndReturn(True)
+        cacheManagerMock.exists(DIRPATH).AndReturn(True)
         cacheManagerMock.isDirectory(DIRPATH).AndReturn(False)
         mox.Replay(cacheManagerMock)
 
@@ -79,7 +79,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(DIRPATH).AndReturn(True)
+        cacheManagerMock.exists(DIRPATH).AndReturn(True)
         cacheManagerMock.isDirectory(DIRPATH).AndReturn(True)
         mox.Replay(cacheManagerMock)
 
@@ -89,7 +89,7 @@ class CacheFsUnitTest(unittest.TestCase):
         FILEPATH = '/FILE'
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(FILEPATH).AndReturn(True)
+        cacheManagerMock.exists(FILEPATH).AndReturn(True)
         cacheManagerMock.isDirectory(FILEPATH).AndReturn(False)
         mox.Replay(cacheManagerMock)
 
@@ -99,7 +99,7 @@ class CacheFsUnitTest(unittest.TestCase):
         DIRPATH = '/DIR'
 
         cacheManagerMock = self.sut.cacheManager = mox.MockObject(cachefs.CacheManager)
-        cacheManagerMock.isExisting(DIRPATH).AndReturn(False)
+        cacheManagerMock.exists(DIRPATH).AndReturn(False)
         mox.Replay(cacheManagerMock)
 
         self.assertEqual(-errno.ENOENT, self.sut.opendir(DIRPATH))

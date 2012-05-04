@@ -34,7 +34,7 @@ class DiskCache(object):
         return os.path.isdir(self._pathFactory.createAbsoluteSourcePath(path))
 
     @trace
-    def isExisting(self, path):
+    def exists(self, path):
         pathToCache = self._pathFactory.createPathToDiskCache(path)
 
         if os.path.lexists(pathToCache):
@@ -195,7 +195,7 @@ class DiskCache(object):
         except:
             pass
         self._createDirectoryInitMarker(path)
-        self._memoryCache.hasAllChildrenAttributesCached(path, True)
+        self._memoryCache.markAsChildrenCached(path, True)
 
 
     @trace

@@ -68,11 +68,11 @@ class CacheManager(object):
         return self._diskCache.isDirectory(path)
 
     @trace
-    def isExisting(self, path):
-        fileExists = self._memoryCache.isExisting(path)
+    def exists(self, path):
+        fileExists = self._memoryCache.exists(path)
         if not fileExists is None:
             return fileExists
-        return self._diskCache.isExisting(path)
+        return self._diskCache.exists(path)
 
     def _getAttributesFromDiskCache(self, path):
 

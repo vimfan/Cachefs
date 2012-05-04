@@ -87,7 +87,7 @@ class CacheFs(fuse.Fuse):
     @trace
     def access(self, path, flags):
         if flags == os.F_OK:
-            if self.cacheManager.isExisting(path):
+            if self.cacheManager.exists(path):
                 return 0
             else:
                 return -errno.EACCES
@@ -104,14 +104,14 @@ class CacheFs(fuse.Fuse):
 
     @trace
     def opendir(self, path):
-        if not (self.cacheManager.isExisting(path) and self.cacheManager.isDirectory(path)):
+        if not (self.cacheManager.exists(path) and self.cacheManager.isDirectory(path)):
             return -errno.ENOENT
         return None # success
 
     @trace
     def readdir(self, path, offset = None, dh = None):
         # TODO: Update timestamps: readdir updates atime
-        if not self.cacheManager.isExisting(path):
+        if not self.cacheManager.exists(path):
             yield
         elif not self.cacheManager.isDirectory(path):
             yield

@@ -54,10 +54,10 @@ class CacheFsUnitTest(unittest.TestCase):
         memory_cache.cacheAttributes('/home/a', 3)
         memory_cache.cacheAttributes('/home/b', 4)
 
-        memory_cache.hasAllChildrenAttributesCached('/', True)
+        memory_cache.markAsChildrenCached('/', True)
         self.assertEqual(['home'], memory_cache.listDirectory('/'))
 
-        memory_cache.hasAllChildrenAttributesCached('/home', True)
+        memory_cache.markAsChildrenCached('/home', True)
         self.assertEqual(['a', 'b'], memory_cache.listDirectory('/home'))
 
     def _create_memory_cache(self):

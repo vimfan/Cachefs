@@ -90,20 +90,20 @@ class Exists(CacheManagerModuleTest):
         TestHelper.create_source_file(self.cfg.cache_manager,
                                       file_path,
                                       '.' * 5)
-        self.assertTrue(self.sut.isExisting(file_path))
+        self.assertTrue(self.sut.exists(file_path))
 
 class ExistsRoot(CacheManagerModuleTest):
 
     def test(self):
         file_path = '/'
-        self.assertTrue(self.sut.isExisting(file_path))
+        self.assertTrue(self.sut.exists(file_path))
 
 class IsDir(CacheManagerModuleTest):
 
     def test(self):
         dir_path = '/TestCacheManager.test_isDirectory'
         TestHelper.create_source_dir(self.cfg.cache_manager, dir_path)
-        self.assertTrue(self.sut.isExisting(dir_path))
+        self.assertTrue(self.sut.exists(dir_path))
         self.assertTrue(self.sut.isDirectory(dir_path))
 
 class ListDir(CacheManagerModuleTest):
@@ -120,7 +120,7 @@ class ListDir(CacheManagerModuleTest):
         file_path = os.sep.join([dir_path, file_name])
         TestHelper.create_source_file(cfg, file_path, 'file_content ... ')
 
-        self.assertTrue(self.sut.isExisting(dir_path))
+        self.assertTrue(self.sut.exists(dir_path))
         #precond:
         self.sut.getAttributes(dir_path)
 
@@ -673,8 +673,6 @@ class TestAccessToCacheAndSourceDirectories(CachefsSystemTest):
 
     def test(self):
 
-        self.maxDiff = None
-
         def cacheableOperations():
             self._access("/NON_EXISTING_FILE", os.F_OK)
             self._getstat("/i/2.txt")
@@ -718,7 +716,7 @@ class CacheFsWithMockedTimerTestCase(CachefsSystemTest):
     def __init__(self, *args, **kw):
         CachefsSystemTest.__init__(self, *args, cache_via_memfs=True, source_via_memfs=True, **kw)
         self.moxConfig = mox.Mox()
-        self.initialTimeValue = 0
+        self.initialTimeValue = 17
 
     def precondition(self):
         TestHelper.execute_source(self.cfg, '''
@@ -784,23 +782,37 @@ class locked(object):
 
 class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
 
-    def test(self):
-        self.maxDiff = None
+    def _getAllPorts(self):
+        return [ self.source_memfs_inport,
+                 self.cache_memfs_inport ] 
 
+    def assertNoMsgQueued(self, port):
+        self.assertEqual([], TestHelper.fetch_all(port))
+
+    def assertSomeMsgQueued(self, port):
+        self.assertNotEqual([], TestHelper.fetch_all(port))
+
+    def assertNoMsgQueuedAllPorts(self):
+        for port in self._getAllPorts():
+            self.assertNoMsgQueued(port)
+
+    def assertSomeMsgQueuedAllPorts(self): 
+        for port in self._getAllPorts():
+            self.assertSomeMsgQueued(port)
+
+    def test(self):
         st = self._getstat("/dir/file")
-        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
-        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+        self.assertSomeMsgQueuedAllPorts()
 
         self.assertEqual(st, self._getstat("/dir/file"))
-        self.assertEqual([], TestHelper.fetch_all(self.source_memfs_inport))
-        self.assertEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+        self.assertNoMsgQueuedAllPorts()
 
         f = self._open("/dir/file")
         f.readlines()
         f.close()
 
-        self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
-        self.assertNotEqual([], TestHelper.fetch_all(self.cache_memfs_inport))
+        self.assertSomeMsgQueued(self.source_memfs_inport)
+        self.assertSomeMsgQueued(self.cache_memfs_inport)
 
         time.sleep(0.5)
 
@@ -826,8 +838,6 @@ class MemoryCacheExpiration(CacheFsWithMockedTimerTestCase):
 class DiscCacheExpiration(CacheFsWithMockedTimerTestCase):
 
     def test(self):
-        self.maxDiff = None
-
         self._getstat("/dir/file")
         self.assertNotEqual([], TestHelper.fetch_all(self.source_memfs_inport))
 
